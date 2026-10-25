@@ -22,18 +22,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let navigation = SettingsNavigation()
     private let login = LoginLaunchSession(service: LoginLaunchService())
     private lazy var setup = OnboardingSession(state: state)
-    private lazy var session = CalendarSession(reader: EventKitCalendarReader(), state: state)
-    private lazy var hud = CountdownHUDController(state: state, session: session)
-    private lazy var audioCues = AudioCueSession(state: state, player: SystemSoundPlayer()) { [weak self] cues in
+    private lazy var live = MeetingSession(reader: EventKitCalendarReader(), state: state, player: SystemSoundPlayer(), cueHandled: { [weak self] cues in
         self?.hud.showCueWiggles(for: cues.map(\.occurrence))
-    }
-    private var audioObservationGeneration = 0
-    private var sleeping = false
+    })
+    private var session: CalendarSession { live.calendarSession }
+    private var audioCues: AudioCueSession { live.audioCues }
+    private lazy var hud = CountdownHUDController(state: state, session: session)
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var timer: Timer?
     private var observers: Set<AnyCancellable> = []
     private var tickCount = 0
+    private var titleObservationGeneration = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -45,14 +45,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.delegate = self
         item.menu = menu
         statusItem = item
-        session.start()
+        live.start()
         hud.start()
-        observeAudio()
         installObservers()
         let timer = Timer(timeInterval: 1, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
+        timer.tolerance = 0.2
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
-        updateTitle()
+        titleObservationGeneration += 1
+        observeTitle(titleObservationGeneration)
         if setup.isPresented { showSettings() }
     }
 
@@ -203,8 +204,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func updateTitle() {
-        let title = session.menuBarState.text(titleLimit: state.preferences.menuTitleLimit, formatTime: formattedTime)
-        statusItem?.button?.title = title.isEmpty ? "" : " " + title
+        let title = live.menuBarState.text(titleLimit: state.preferences.menuTitleLimit, formatTime: formattedTime)
+        let display = title.isEmpty ? "" : " " + title
+        if statusItem?.button?.title != display { statusItem?.button?.title = display }
+    }
+
+    private func observeTitle(_ token: Int) {
+        withObservationTracking {
+            _ = live.menuBarState
+            _ = state.preferences.menuTitleLimit
+        } onChange: { [weak self] in
+            Task { @MainActor in
+                guard let self, self.titleObservationGeneration == token else { return }
+                self.observeTitle(token)
+            }
+        }
+        updateTitle()
     }
 
     private func installObservers() {
@@ -213,62 +228,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             NotificationCenter.default.publisher(for: name)
                 .receive(on: DispatchQueue.main)
                 .sink { [weak self] _ in
-                    self?.audioCues.reset()
-                    self?.session.invalidate()
+                    self?.live.invalidate()
                 }
                 .store(in: &observers)
         }
         NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
             .receive(on: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.sleeping = false
-                self?.audioCues.reset()
-                self?.session.invalidate()
+                self?.live.setSleeping(false)
             }
             .store(in: &observers)
         NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)
             .sink { [weak self] _ in
                 MainActor.assumeIsolated {
-                    self?.sleeping = true
-                    self?.audioCues.reset()
+                    self?.live.setSleeping(true)
                 }
             }
             .store(in: &observers)
     }
 
-    private func observeAudio() {
-        audioObservationGeneration += 1
-        let token = audioObservationGeneration
-        withObservationTracking {
-            _ = state.preferences
-            _ = state.selectedCalendarIDs
-            _ = state.pauseUntil
-            _ = state.hiddenEvents
-            _ = session.status
-            _ = session.occurrences
-        } onChange: { [weak self] in
-            // All observed values are main-actor owned. Disarm synchronously,
-            // before a queued timer can cross a boundary using stale settings.
-            MainActor.assumeIsolated { self?.audioCues.reset() }
-            Task { @MainActor in
-                guard let self, self.audioObservationGeneration == token else { return }
-                self.observeAudio()
-                self.updateAudio()
-            }
-        }
-        updateAudio()
-    }
-
-    private func updateAudio() {
-        audioCues.update(occurrences: session.reminderOccurrences,
-                         isActive: !sleeping && session.status == .ready && !session.isPaused, at: Date())
-    }
-
-    @objc private func refreshCalendars() { Task { await session.refresh(); updateTitle() } }
+    @objc private func refreshCalendars() { Task { await live.refresh(); updateTitle() } }
 
     @objc private func tick() {
-        session.tick()
-        updateAudio()
+        live.tick()
         updateTitle()
         tickCount += 1
         if tickCount % 30 == 0 { Task { await session.checkAccess() } }
@@ -298,10 +280,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         timer?.invalidate()
         observers.removeAll()
-        audioObservationGeneration += 1
-        audioCues.reset()
+        titleObservationGeneration += 1
         hud.stop()
-        session.stop()
+        live.stop()
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {

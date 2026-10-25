@@ -15,8 +15,8 @@ Occurrence/series hiding and the recovery view are connected, as is temporary
 HUD-row suppression. Pause/Resume is available from the always-present menu.
 The floating countdown stack and optional audio cues are connected to live
 meetings. First-run onboarding and opt-in launch-at-login controls are connected.
-The app loads no prototype/dummy meetings. Final integration and native
-acceptance scenarios are still in progress.
+The app loads no prototype/dummy meetings. The shared live-session pipeline has
+end-to-end deterministic regression coverage; native acceptance is still in progress.
 
 First launch shows a three-step setup: menu-bar introduction, calendar
 permission/selection, and optional launch at login. You may finish without
@@ -116,6 +116,16 @@ when explicitly testing a different supported architecture.
 - `MeetingPolicy` consumes an explicit timestamp and calendar timezone and
   returns today's remaining meetings, menu summary and HUD rows. No timers or
   UI objects are involved. The menu and native HUD consume this same policy.
+- `MeetingSession` coordinates the real `CalendarSession`, `AudioCueSession`
+  and lifecycle events behind the same public interface used by the app and
+  integration fixtures. All outputs share the reconciled calendar timestamp,
+  including audio arming after settings edits between native timer ticks.
+  It disarms synchronously on external changes and guards observation rearming,
+  while normal timestamp-driven hide cleanup preserves other eligible due cues.
+  Calendar refreshes retire stale queued settings callbacks. The native
+  delegate now translates OS lifecycle notifications into this shared session,
+  rather than owning a separate audio orchestration path. The menu title reacts
+  to session changes, and unchanged titles are not rewritten on every tick.
 - `App/CountdownHUDController.swift` owns the nonactivating panel and passive
   SwiftUI rows, native dragging/scrolling and display recovery. Pure
   `HUDLayoutPolicy` tests placement/clamping/overflow without windows;
@@ -140,8 +150,14 @@ when explicitly testing a different supported architecture.
   `App/LoginLaunchService.swift` uses `SMAppService.mainApp`, and
   `App/SetupViews.swift` shares calendar and login controls between setup/settings.
 - `Tests/MeetMeetCoreTests/`: shared deterministic Swift Testing cases, with no
-  real calendars, permission prompts, network requests or timer waits in core
-  tests. Xcode additionally compiles the native controller for passive-window
+  real calendars, permission prompts, network requests or wall-clock timer waits
+  in core tests. `MeetingSessionTests.swift` supplies fake clock/calendar/storage/
+  sound adapters to the production pipeline, covering start/end consistency,
+  fast pause/resume, settings edits, hiding versus HUD suppression, permission
+  loss, retry and empty recovery, midnight/overnight/short/coincident meetings,
+  rescheduling, sleep/wake, backward clocks and restart receipts. Observation
+  delivery uses bounded task yields where needed, not timing sleeps.
+  Xcode additionally compiles the native controller for passive-window
   configuration, scrolling and appearance/pause/resume focus checks. Those
   native checks require a GUI session and briefly show a fixture HUD, with
   bounded async UI waits. Setup rendering uses fake calendar/login services;

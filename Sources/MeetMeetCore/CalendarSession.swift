@@ -165,6 +165,13 @@ public final class CalendarSession {
 
     public func refresh() async {
         guard !stopped else { return }
+        // This request already captures the latest selection/horizon. Retire
+        // queued settings callbacks from older snapshots so they cannot clear
+        // its freshly reconciled result after the request completes.
+        if observing {
+            observationGeneration += 1
+            observeSettings(observationGeneration)
+        }
         scheduler.cancel()
         generation += 1
         let token = generation
