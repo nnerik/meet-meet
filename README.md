@@ -13,9 +13,17 @@ countdown rows, formatting, ordering and pulse thresholds. Read-only EventKit
 access, explicit calendar selection and live menu summaries are now connected.
 Occurrence/series hiding and the recovery view are connected, as is temporary
 HUD-row suppression. Pause/Resume is available from the always-present menu.
-The floating countdown stack and optional audio cues are connected to live meetings. Onboarding
-and login enablement are not implemented yet. The app loads no
-prototype/dummy meetings.
+The floating countdown stack and optional audio cues are connected to live
+meetings. First-run onboarding and opt-in launch-at-login controls are connected.
+The app loads no prototype/dummy meetings. Final integration and native
+acceptance scenarios are still in progress.
+
+First launch shows a three-step setup: menu-bar introduction, calendar
+permission/selection, and optional launch at login. You may finish without
+calendar access or any selections. Completing setup is saved; later launches
+stay quiet. Closing setup before finishing leaves it available from Settings
+and on the next launch, without resetting saved choices. Use **Settings →
+General → Review Setup** to revisit it.
 
 Open **Settings → Calendars → Allow Calendar Access**, then select calendars
 to monitor. Nothing is selected automatically. Permission is requested only
@@ -62,8 +70,13 @@ extend it. Resume restores current eligible presentation without changing hide
 rules or temporary suppression. Access problems remain visible inside the
 dropdown while the menu bar says Paused.
 
-Settings save immediately and survive relaunch. Login status is read from
-macOS, not a stored toggle; enabling login launch arrives with onboarding.
+Settings save immediately and survive relaunch. **Settings → General → Launch
+at login** uses the actual macOS service state, not a stored toggle. Registration
+only happens after an explicit toggle; setup completion never enables it.
+Pending approval is shown separately from Enabled, with a Login Items settings
+button and actionable errors. Quitting stays quit until manual launch or the
+next login if enabled. Finder/Spotlight reopen shows setup/settings, not another
+agent instance. Closing settings leaves the app running in the menu bar.
 Numeric settings support direct entry (Return or leaving the field saves) and
 optional steppers. New preferences default to a 30-minute upcoming lead time;
 existing saved choices are preserved.
@@ -120,12 +133,19 @@ when explicitly testing a different supported architecture.
 - `MenuBarState` gives pause priority over calendar status and meeting summaries;
   the dropdown still exposes the underlying status and meeting details. Menu
   entries include full-title tooltips/accessibility labels, calendar and times.
+- `OnboardingSession` owns setup progress and persisted completion without
+  requiring access or calendar selection. `LoginLaunchSession` reads a
+  replaceable OS service adapter and serializes explicit registration changes;
+  it has no mirrored preference or launch-time side effects. Native
+  `App/LoginLaunchService.swift` uses `SMAppService.mainApp`, and
+  `App/SetupViews.swift` shares calendar and login controls between setup/settings.
 - `Tests/MeetMeetCoreTests/`: shared deterministic Swift Testing cases, with no
   real calendars, permission prompts, network requests or timer waits in core
   tests. Xcode additionally compiles the native controller for passive-window
   configuration, scrolling and appearance/pause/resume focus checks. Those
   native checks require a GUI session and briefly show a fixture HUD, with
-  bounded async UI waits. They never read the user's calendars.
+  bounded async UI waits. Setup rendering uses fake calendar/login services;
+  tests never request real permission or register a login item.
 
 Keep calendar access read-only. Store no event-content logs or telemetry. Real
 provider identity and production lifecycle/accessibility checks belong to the
@@ -141,7 +161,7 @@ content. Single-occurrence hide rules are cleaned only when a matching source
 snapshot proves the event has ended; unmatched rules remain manually removable.
 Series rules persist. Temporary suppression follows an identifiable phase's
 edited boundary, restores in its final minute, and does not carry from upcoming
-to ongoing. Cue-history scheduling is implemented in a later ticket.
+to ongoing. Audio scheduling persists handled cue metadata before playback.
 
 Hide matching deliberately does not trust external identifiers alone after
 local-identifier churn or a series split. Detached exceptions are linked only
@@ -174,5 +194,11 @@ inspecting the app's ordinary entitlements.
 Before real calendar/login acceptance testing, use a stable app path and a
 consistent development signing identity if available. Ad-hoc rebuilds are not
 a guarantee that macOS will preserve privacy consent or login registration.
+Build Release, quit the development copy, and copy
+`build/DerivedData/Build/Products/Release/MeetMeet.app` to a stable Applications location before opting
+in. Launch that copy; do not enable a temporary test-runner/build-path copy and
+then remove it. Test approval, disable, explicit Quit and actual logout/login
+manually; these are not established by fake-service tests. Moving the app to
+Applications and enabling login are user actions, never build-script side effects.
 No provisioning profile, private signing credentials, login registration or
 global Xcode setting is added by these commands.

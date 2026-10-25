@@ -1,7 +1,6 @@
 import AppKit
 import SwiftUI
 import MeetMeetCore
-import ServiceManagement
 import Combine
 import EventKit
 import Observation
@@ -21,6 +20,8 @@ enum MeetMeetApp {
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let state = AppState(storage: UserDefaultsStateStore())
     private let navigation = SettingsNavigation()
+    private let login = LoginLaunchSession(service: LoginLaunchService())
+    private lazy var setup = OnboardingSession(state: state)
     private lazy var session = CalendarSession(reader: EventKitCalendarReader(), state: state)
     private lazy var hud = CountdownHUDController(state: state, session: session)
     private lazy var audioCues = AudioCueSession(state: state, player: SystemSoundPlayer()) { [weak self] cues in
@@ -52,6 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         RunLoop.main.add(timer, forMode: .common)
         self.timer = timer
         updateTitle()
+        if setup.isPresented { showSettings() }
     }
 
     func menuNeedsUpdate(_ menu: NSMenu) {
@@ -281,8 +283,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 defer: false
             )
             window.title = "Meet Meet Settings"
+            window.identifier = NSUserInterfaceItemIdentifier("meetmeet.settings")
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: SettingsView(state: state, session: session, hud: hud, audioCues: audioCues, navigation: navigation))
+            window.contentView = NSHostingView(rootView: SettingsView(state: state, session: session, hud: hud, audioCues: audioCues, setup: setup, login: login, navigation: navigation))
             window.center()
             settingsWindow = window
         }
@@ -317,12 +320,21 @@ private struct SettingsView: View {
     let session: CalendarSession
     let hud: CountdownHUDController
     let audioCues: AudioCueSession
+    let setup: OnboardingSession
+    let login: LoginLaunchSession
     @Bindable var navigation: SettingsNavigation
     @State private var errorMessage: String?
-    @State private var loginStatus = SMAppService.mainApp.status
     @State private var confirmUnhideAll = false
 
     var body: some View {
+        if setup.isPresented {
+            OnboardingView(setup: setup, state: state, session: session, login: login)
+        } else {
+            settingsBody
+        }
+    }
+
+    private var settingsBody: some View {
         VStack(spacing: 0) {
             if !state.recoveryNotices.isEmpty {
                 Label("Some saved records could not be read. Other settings are unchanged; newer records are preserved.", systemImage: "exclamationmark.triangle")
@@ -339,7 +351,7 @@ private struct SettingsView: View {
             }
             TabView(selection: $navigation.tab) {
                 Tab("General", systemImage: "gearshape", value: SettingsTab.general) { general }
-                Tab("Calendars", systemImage: "calendar", value: SettingsTab.calendars) { calendars }
+                Tab("Calendars", systemImage: "calendar", value: SettingsTab.calendars) { CalendarSettingsView(state: state, session: session) }
                 Tab("Audio", systemImage: "speaker.wave.2", value: SettingsTab.audio) { audio }
                 Tab("Hidden Events", systemImage: "eye.slash", value: SettingsTab.hiddenEvents) { hiddenEvents }
             }
@@ -348,9 +360,6 @@ private struct SettingsView: View {
         .alert("Could not save settings", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK") { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
-        .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
-            loginStatus = SMAppService.mainApp.status
-        }
     }
 
     private var general: some View {
@@ -365,13 +374,12 @@ private struct SettingsView: View {
                 IntegerSettingField("Title length", value: preference(\.menuTitleLimit), range: 8...80, unit: "characters")
             }
             Section("Login") {
-                LabeledContent("Launch at login", value: loginDescription)
-                Text("This is the actual macOS service status. Enabling login launch will be available with onboarding.")
-                    .font(.caption).foregroundStyle(.secondary)
+                LoginLaunchControls(login: login)
             }
             Section {
                 Text("Preferences save immediately. Live countdowns and optional sounds follow your selected calendars.")
                     .font(.caption).foregroundStyle(.secondary)
+                Button("Review Setup…") { setup.present() }
             }
         }
         .formStyle(.grouped)
@@ -405,60 +413,6 @@ private struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
-    }
-
-    private var calendars: some View {
-        Form {
-            Section("Calendar access") {
-                Text("Meet Meet only reads events. macOS requires full calendar access to read your selected calendars; the app never creates, edits or deletes events.")
-                    .font(.callout).foregroundStyle(.secondary)
-                LabeledContent("Status", value: session.status.message)
-                if session.access == .notRequested || session.access == .unreadable {
-                    Button("Allow Calendar Access") { Task { await session.requestAccess() } }
-                        .disabled(session.status == .refreshing)
-                } else if session.access == .denied || session.access == .restricted {
-                    Button("Open Calendar Privacy Settings") {
-                        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Calendars") {
-                            NSWorkspace.shared.open(url)
-                        }
-                    }
-                }
-                if session.status == .refreshing { ProgressView().controlSize(.small) }
-                if session.access == .fullAccess {
-                    Button("Refresh / Retry") { Task { await session.refresh() } }
-                        .disabled(session.status == .refreshing)
-                }
-            }
-            if !session.calendars.isEmpty {
-                Section("Calendars to monitor") {
-                    ForEach(session.calendars) { calendar in
-                        Toggle(isOn: calendarSelection(calendar.id)) {
-                            Text(calendar.title)
-                            Text(calendar.sourceTitle).font(.caption).foregroundStyle(.secondary)
-                        }
-                        .toggleStyle(.checkbox)
-                    }
-                    Text("New calendars stay unselected. Choices are preserved if a calendar or permission temporarily disappears.")
-                        .font(.caption).foregroundStyle(.secondary)
-                }
-            }
-            if session.status == .ready {
-                Section {
-                    Text("\(session.presentation.remainingToday.count) eligible remaining meetings today. Meeting summaries are now live in the calendar menu.")
-                        .font(.callout)
-                }
-            }
-        }
-        .formStyle(.grouped)
-    }
-
-    private func calendarSelection(_ id: String) -> Binding<Bool> {
-        Binding(get: { state.selectedCalendarIDs.contains(id) }, set: { selected in
-            var ids = state.selectedCalendarIDs
-            if selected { ids.insert(id) } else { ids.remove(id) }
-            do { try state.setSelectedCalendarIDs(ids) }
-            catch { errorMessage = error.localizedDescription }
-        })
     }
 
     private var hiddenEvents: some View {
@@ -509,16 +463,6 @@ private struct SettingsView: View {
     private var soundNames: [String] {
         let names = SystemSoundPlayer.soundNames
         return Set(names + [state.preferences.startCue.soundName, state.preferences.endCue.soundName]).sorted()
-    }
-
-    private var loginDescription: String {
-        switch loginStatus {
-        case .enabled: "Enabled"
-        case .notRegistered: "Off"
-        case .requiresApproval: "Approval needed in System Settings"
-        case .notFound: "Service unavailable"
-        @unknown default: "Unknown service status"
-        }
     }
 
     private func preference<Value>(_ key: WritableKeyPath<AppPreferences, Value>) -> Binding<Value> {

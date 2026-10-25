@@ -20,7 +20,11 @@
 		A10000000000000000000012 /* HUDPresentationTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000015; };
 		A10000000000000000000013 /* NativeHUDTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000016; };
 		A10000000000000000000014 /* CountdownHUDController.swift in Test Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000014; };
-/* End PBXBuildFile section */
+        A10000000000000000000025 /* LoginLaunchService.swift in Test Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021; };
+        A10000000000000000000026 /* SetupViews.swift in Test Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022; };
+        A10000000000000000000022 /* LoginLaunchService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021; };
+        A10000000000000000000023 /* SetupViews.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022; };
+        A10000000000000000000024 /* SetupAndLoginTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023; };
         A10000000000000000000018 = {isa = PBXBuildFile; fileRef = A20000000000000000000019; };
         A10000000000000000000019 = {isa = PBXBuildFile; fileRef = A20000000000000000000020; };
         A10000000000000000000020 = {isa = PBXBuildFile; fileRef = A20000000000000000000019; };
@@ -28,6 +32,7 @@
         A10000000000000000000017 /* SystemSoundPlayer.swift in Test Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017; };
         A10000000000000000000015 /* SystemSoundPlayer.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000017; };
         A10000000000000000000016 /* AudioCueTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000018; };
+/* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
 		A20000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/MeetMeetApp.swift; sourceTree = "<group>"; };
@@ -46,11 +51,14 @@
 		A20000000000000000000014 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/CountdownHUDController.swift; sourceTree = "<group>"; };
 		A20000000000000000000015 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/MeetMeetCoreTests/HUDPresentationTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000016 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/MeetMeetCoreTests/NativeHUDTests.swift; sourceTree = "<group>"; };
-/* End PBXFileReference section */
+        A20000000000000000000021 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/LoginLaunchService.swift; sourceTree = "<group>"; };
+        A20000000000000000000022 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/SetupViews.swift; sourceTree = "<group>"; };
+        A20000000000000000000023 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/MeetMeetCoreTests/SetupAndLoginTests.swift; sourceTree = "<group>"; };
         A20000000000000000000019 = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = media/meet-meet.mp3; sourceTree = "<group>"; };
         A20000000000000000000020 = {isa = PBXFileReference; lastKnownFileType = audio.mp3; path = media/wrap-wrap.mp3; sourceTree = "<group>"; };
         A20000000000000000000017 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/SystemSoundPlayer.swift; sourceTree = "<group>"; };
         A20000000000000000000018 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/MeetMeetCoreTests/AudioCueTests.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		A30000000000000000000001 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000002,); runOnlyForDeploymentPostprocessing = 0; };
@@ -58,7 +66,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A40000000000000000000001 = {isa = PBXGroup; children = (A20000000000000000000019,A20000000000000000000020,A20000000000000000000017,A20000000000000000000018,A20000000000000000000001,A20000000000000000000010,A20000000000000000000014,A20000000000000000000002,A20000000000000000000003,A20000000000000000000007,A20000000000000000000004,A20000000000000000000008,A20000000000000000000009,A20000000000000000000011,A20000000000000000000012,A20000000000000000000013,A20000000000000000000015,A20000000000000000000016,A40000000000000000000002,); sourceTree = "<group>"; };
+		A40000000000000000000001 = {isa = PBXGroup; children = (A20000000000000000000021,A20000000000000000000022,A20000000000000000000023,A20000000000000000000019,A20000000000000000000020,A20000000000000000000017,A20000000000000000000018,A20000000000000000000001,A20000000000000000000010,A20000000000000000000014,A20000000000000000000002,A20000000000000000000003,A20000000000000000000007,A20000000000000000000004,A20000000000000000000008,A20000000000000000000009,A20000000000000000000011,A20000000000000000000012,A20000000000000000000013,A20000000000000000000015,A20000000000000000000016,A40000000000000000000002,); sourceTree = "<group>"; };
 		A40000000000000000000002 = {isa = PBXGroup; children = (A20000000000000000000005,A20000000000000000000006,); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
@@ -114,8 +122,8 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A60000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000015,A10000000000000000000001,A10000000000000000000007,A10000000000000000000011,); runOnlyForDeploymentPostprocessing = 0; };
-		A60000000000000000000002 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000017,A10000000000000000000016,A10000000000000000000003,A10000000000000000000005,A10000000000000000000006,A10000000000000000000008,A10000000000000000000009,A10000000000000000000010,A10000000000000000000012,A10000000000000000000013,A10000000000000000000014,); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000022,A10000000000000000000023,A10000000000000000000015,A10000000000000000000001,A10000000000000000000007,A10000000000000000000011,); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000002 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000025,A10000000000000000000026,A10000000000000000000024,A10000000000000000000017,A10000000000000000000016,A10000000000000000000003,A10000000000000000000005,A10000000000000000000006,A10000000000000000000008,A10000000000000000000009,A10000000000000000000010,A10000000000000000000012,A10000000000000000000013,A10000000000000000000014,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
