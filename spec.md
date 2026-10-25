@@ -82,7 +82,7 @@ Use a calendar icon followed by time and summary when relevant:
 
 ### Timing, formatting and pulse
 
-- Default lead time is 5 minutes. At start, change the bell to play and count toward end. At end, remove the row; never show negative time.
+- Default lead time is 30 minutes. At start, change the bell to play and count toward end. At end, remove the row; never show negative time.
 - Show hours/minutes (`1h 15m`), minutes (`15m`), or minutes:seconds (`4:59`) when below the seconds threshold, default 5 minutes. A zero seconds threshold disables seconds.
 - Round upward at the displayed precision so positive time does not display zero. Evaluate state boundaries from actual timestamps, not rounded display values.
 - Pulse the relevant SF Symbol continuously during the last 60 seconds of either phase. Switch/stop at the boundary; honor Reduce Motion by disabling pulse. Retain accessible state semantics without animation.
@@ -143,7 +143,7 @@ Use a calendar icon followed by time and summary when relevant:
 | Setting | Default | Allowed values |
 | --- | --- | --- |
 | Launch at login | Off | Actual service state with enable/disable action |
-| HUD lead time | 5 minutes | 0–120 minutes; zero ongoing-only |
+| HUD lead time | 30 minutes | 0–120 minutes; zero ongoing-only |
 | Seconds threshold | 5 minutes | 0–60 minutes; zero disables seconds |
 | Menu title limit | 24 characters | 8–80 characters |
 | Start audio | Off; suggested offset 1 minute | System sound, enable/disable, offset 0–60 minutes |
@@ -152,6 +152,8 @@ Use a calendar icon followed by time and summary when relevant:
 | Calendar selection | Explicit onboarding choice | Available EventKit calendars; new calendars unselected |
 
 Settings sections: General, Calendars, Audio and Hidden Events. General includes menu-title length as well as countdown/login controls. Validate input and apply changes immediately without retroactive audio.
+
+Minute/count settings support direct whole-number entry as well as optional steppers. Commit typed values on Return or focus loss; show inline range errors without saving invalid input. The 30-minute lead-time default applies to fresh/missing preferences, not as an override of an existing saved choice.
 
 Persist locally: preferences/calendar choices, onboarding completion, pause expiry, stack location, occurrence/series rules, phase-specific temporary suppression, and cue-handling history. Use app-local versioned records (UserDefaults/AppStorage or equivalent simple local storage); no server. Retain only metadata needed for behavior/recovery; no event-content logs or telemetry. Identifier evidence must be scoped to calendar/source, not a title-based global key.
 

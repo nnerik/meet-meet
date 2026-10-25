@@ -10,6 +10,12 @@
 		A10000000000000000000002 /* MeetMeetCore in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001; };
 		A10000000000000000000003 /* MeetingOccurrenceTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004; };
 		A10000000000000000000004 /* MeetMeetCore in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002; };
+		A10000000000000000000005 /* AppStateTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008; };
+		A10000000000000000000006 /* MeetingPolicyTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009; };
+		A10000000000000000000007 /* EventKitCalendarReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000010; };
+		A10000000000000000000008 /* CalendarSessionTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000011; };
+		A10000000000000000000009 /* ReminderRulesTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000012; };
+		A10000000000000000000010 /* MenuAndPauseTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000013; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -20,6 +26,12 @@
 		A20000000000000000000005 = {isa = PBXFileReference; explicitFileType = wrapper.application; path = MeetMeet.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000006 = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; path = MeetMeetCoreTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000007 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Package.swift; sourceTree = "<group>"; };
+		A20000000000000000000008 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/MeetMeetCoreTests/AppStateTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000009 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/MeetMeetCoreTests/MeetingPolicyTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000010 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/EventKitCalendarReader.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/MeetMeetCoreTests/CalendarSessionTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000012 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/MeetMeetCoreTests/ReminderRulesTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000013 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/MeetMeetCoreTests/MenuAndPauseTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -28,7 +40,7 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
-		A40000000000000000000001 = {isa = PBXGroup; children = (A20000000000000000000001,A20000000000000000000002,A20000000000000000000003,A20000000000000000000007,A20000000000000000000004,A40000000000000000000002,); sourceTree = "<group>"; };
+		A40000000000000000000001 = {isa = PBXGroup; children = (A20000000000000000000001,A20000000000000000000010,A20000000000000000000002,A20000000000000000000003,A20000000000000000000007,A20000000000000000000004,A20000000000000000000008,A20000000000000000000009,A20000000000000000000011,A20000000000000000000012,A20000000000000000000013,A40000000000000000000002,); sourceTree = "<group>"; };
 		A40000000000000000000002 = {isa = PBXGroup; children = (A20000000000000000000005,A20000000000000000000006,); name = Products; sourceTree = "<group>"; };
 /* End PBXGroup section */
 
@@ -83,8 +95,8 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A60000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001,); runOnlyForDeploymentPostprocessing = 0; };
-		A60000000000000000000002 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000003,); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000001 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000001,A10000000000000000000007,); runOnlyForDeploymentPostprocessing = 0; };
+		A60000000000000000000002 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000003,A10000000000000000000005,A10000000000000000000006,A10000000000000000000008,A10000000000000000000009,A10000000000000000000010,); runOnlyForDeploymentPostprocessing = 0; };
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */

@@ -6,11 +6,38 @@ the [MVP backlog](https://github.com/nnerik/meet-meet/issues/12).
 
 ## Current status
 
-The first implementation slice is the sandboxed agent foundation: persistent
-calendar menu, a SwiftUI settings shell, pure meeting snapshots and testable
-calendar/clock/audio/storage boundaries. Calendar reading, countdown HUDs,
-preferences and alerts are not implemented yet. This app does not request
-calendar permission at startup or load prototype/dummy meetings.
+The app currently has a sandboxed agent foundation, persistent calendar menu,
+editable General/Audio preferences, versioned local state and testable core
+boundaries. Deterministic policies now cover event eligibility, menu selection,
+countdown rows, formatting, ordering and pulse thresholds. Read-only EventKit
+access, explicit calendar selection and live menu summaries are now connected.
+Occurrence/series hiding and the recovery view are connected, as is temporary
+HUD-row suppression in the policy layer. Pause/Resume is available from the
+always-present menu. Floating HUD windows, onboarding and
+audio playback are not implemented yet. No prototype/dummy meetings are loaded.
+
+Open **Settings → Calendars → Allow Calendar Access**, then select calendars
+to monitor. Nothing is selected automatically. Permission is requested only
+from that button; subsequent launches reuse existing consent and choices.
+Denied/restricted access has a privacy-settings link; fetch errors have Retry.
+Open a meeting's submenu to hide its occurrence/series or suppress its
+countdown until the final minute. **Manage Hidden Events** opens the saved
+Meetings/Series rules with Unhide and confirmed Unhide All. Temporary hiding
+leaves the menu/audio eligibility intact; its actual HUD effect becomes visible
+when floating windows are connected.
+
+**Pause for Today** keeps the menu and calendar refresh available but hides
+HUD rows and withholds audio-eligible input. Its next-local-midnight deadline
+is saved as a timestamp, so restart or sleeping through that deadline does not
+extend it. Resume restores current eligible presentation without changing hide
+rules or temporary suppression. Access problems remain visible inside the
+dropdown while the menu bar says Paused.
+
+Settings save immediately and survive relaunch. Login status is read from
+macOS, not a stored toggle; enabling login launch arrives with onboarding.
+Numeric settings support direct entry (Return or leaving the field saves) and
+optional steppers. New preferences default to a 30-minute upcoming lead time;
+existing saved choices are preserved.
 
 ## Develop
 
@@ -40,13 +67,60 @@ when explicitly testing a different supported architecture.
 - `App/`: AppKit lifecycle/menu and SwiftUI presentation, sandbox entitlements,
   usage description and stable bundle identifier `dev.nnerik.meetmeet`.
 - `Sources/MeetMeetCore/`: local Swift package with immutable calendar values
-  and testable time/calendar/audio/state boundaries. No AppKit or EventKit.
+  and testable time/calendar/audio/state boundaries. `AppState` owns validated
+  observable preferences and separate versioned records for selection,
+  onboarding, pause, placement, hiding, suppression and cue history. No AppKit
+  or EventKit.
+- `MeetingPolicy` consumes an explicit timestamp and calendar timezone and
+  returns today's remaining meetings, menu summary and HUD rows. No timers or
+  UI objects are involved. The live menu consumes this policy; the native HUD
+  will use the same rows rather than duplicate the policy.
+- `App/EventKitCalendarReader.swift` owns its EventKit store on an actor and
+  converts events to immutable values, retaining recurrence/exception evidence
+  without calendar writes. `CalendarSession` handles access, coalesced refresh,
+  stale-response rejection and retry, with a replaceable scheduler for tests.
+- `ReminderRules` owns persisted hide/suppression actions. Its pure visibility
+  policy filters permanent hides before menu/audio eligibility, and temporary
+  suppression only from HUD rows. Matching uses scoped identifiers and original
+  recurrence dates, never titles; uncertain identity fails visible.
+- `MenuBarState` gives pause priority over calendar status and meeting summaries;
+  the dropdown still exposes the underlying status and meeting details. Menu
+  entries include full-title tooltips/accessibility labels, calendar and times.
 - `Tests/MeetMeetCoreTests/`: Swift Testing cases, shared by SwiftPM and Xcode;
   no real calendars, permission prompts, network requests or timer waits.
 
 Keep calendar access read-only. Store no event-content logs or telemetry. Real
 provider identity and production lifecycle/accessibility checks belong to the
 integration acceptance tickets, not to this initial scaffold.
+
+State uses app-local UserDefaults data records. Loading does not rewrite saved
+data: malformed preference fields fall back individually, unreadable records
+do not reset siblings, and unknown schema versions remain protected from
+overwrite. Recovery notices contain record names/reasons, not private event
+content. Single-occurrence hide rules are cleaned only when a matching source
+snapshot proves the event has ended; unmatched rules remain manually removable.
+Series rules persist. Temporary suppression follows an identifiable phase's
+edited boundary, restores in its final minute, and does not carry from upcoming
+to ongoing. Cue-history scheduling is implemented in a later ticket.
+
+Hide matching deliberately does not trust external identifiers alone after
+local-identifier churn or a series split. Detached exceptions are linked only
+when a current, unambiguous parent is identifiable. A series action on an
+unidentifiable exception reports that limitation and leaves it visible. Provider
+rewrites/full sync may require hiding an event again; old unmatched rules remain
+available for removal.
+
+Calendar queries overlap the current local day and extend across midnight for
+configured HUD/audio horizons. Source notifications are coalesced; wake,
+activation, day/timezone/clock changes and query-horizon/selection changes
+trigger reconciliation. Display-only and volume edits reuse current calendar
+data rather than blanking the menu and refetching.
+Access is also rechecked periodically because store notifications are not a
+guaranteed revocation callback. Untrusted data is cleared on access/error
+transitions, and fetch errors retry with 1–60 second bounded backoff. EventKit
+does not expose a Swift error for every provider/sync problem, so an authorized
+empty fetch is treated as empty, not invented into an error. Remote freshness
+and universal identifier stability are not guaranteed.
 
 ## Local signing and permissions
 
