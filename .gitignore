@@ -1,0 +1,22 @@
+# macOS
+.DS_Store
+.AppleDouble
+._*
+
+# Xcode user settings and build output
+xcuserdata/
+*.xcuserstate
+DerivedData/
+build/
+*.xcarchive
+*.dSYM/
+*.dSYM.zip
+
+# Swift Package Manager
+.build/
+.swiftpm/
+
+# Signing credentials
+*.p12
+*.mobileprovision
+*.provisionprofile
