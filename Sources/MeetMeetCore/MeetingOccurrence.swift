@@ -36,6 +36,12 @@ public struct MeetingOccurrence: Identifiable, Equatable, Sendable {
 
     public var key: OccurrenceKey { OccurrenceKey(calendarID: calendarID, occurrenceID: id) }
 
+    /// Shared structural eligibility; boundary/time-window filtering belongs to callers.
+    public var isEligibleMeeting: Bool {
+        !isAllDay && !isCancelled && attendance != .declined &&
+        start.timeIntervalSinceReferenceDate.isFinite && end.timeIntervalSinceReferenceDate.isFinite && end > start
+    }
+
     public func phase(at now: Date) -> MeetingPhase {
         if now >= end { return .ended }
         return now >= start ? .ongoing : .upcoming

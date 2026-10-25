@@ -88,7 +88,7 @@ public final class CalendarSession {
         pausePersistenceError = nil
     }
 
-    /// Future audio scheduling must consume reminder-filtered values, not raw source snapshots.
+    /// Audio consumes reminder-filtered values, not raw source snapshots.
     public var reminderOccurrences: [MeetingOccurrence] {
         guard status == .ready, !isPaused else { return [] }
         return reminders.visibility(of: occurrences, at: now).occurrences

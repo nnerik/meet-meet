@@ -27,6 +27,19 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
 
     var positionError: String? { model.positionError }
 
+    /// Only cue-time visible rows participate. Never reveal or retain a row for an alert.
+    func showCueWiggles(for occurrences: [OccurrenceKey]) {
+        guard running, panel.isVisible else { return }
+        let previouslyVisible = Set(model.rows.map(\.id))
+        synchronize()
+        let visible = Set(model.rows.map(\.id)).intersection(previouslyVisible)
+        for occurrence in Set(occurrences).intersection(visible) {
+            model.cueWiggles[occurrence] = UUID()
+        }
+    }
+
+    func cueWiggleToken(for occurrence: OccurrenceKey) -> UUID? { model.cueWiggles[occurrence] }
+
     private var revealNow: TimeInterval {
         let elapsed = revealOrigin.duration(to: ContinuousClock().now).components
         return Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
@@ -85,6 +98,7 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         revealTask?.cancel()
         revealTask = nil
         model.rows = []
+        model.cueWiggles = [:]
         model.expanded = false
         reveal = HUDRevealState()
         currentLayout = nil
@@ -117,6 +131,8 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         let previousDeadline = reveal.arrivalUntil
         reveal.update(visibleIDs: Set(rows.map(\.id)), at: revealNow)
         model.rows = rows
+        let visible = Set(rows.map(\.id))
+        model.cueWiggles = model.cueWiggles.filter { visible.contains($0.key) }
         if previousDeadline != reveal.arrivalUntil { scheduleRevealExpiry() }
         guard !rows.isEmpty else {
             model.expanded = false
@@ -256,6 +272,7 @@ private final class CountdownPanel: NSPanel {
 
 @MainActor @Observable
 private final class HUDViewModel {
+    var cueWiggles: [OccurrenceKey: UUID] = [:]
     var rows: [CountdownRow] = []
     var expanded = false
     var timerWidth = 82.0
@@ -279,9 +296,8 @@ private struct CountdownRowsView: View {
                             .multilineTextAlignment(.leading)
                             .frame(width: model.titleWidth, alignment: .leading)
                     }
-                    Image(systemName: row.symbolName)
+                    cueIcon(for: row)
                         .font(.system(size: 17, weight: .medium))
-                        .symbolEffect(.pulse, options: .repeating, isActive: row.shouldPulse && !reduceMotion)
                         .frame(width: 23)
                         .accessibilityHidden(true)
                     Text(row.text)
@@ -300,6 +316,17 @@ private struct CountdownRowsView: View {
             }
         }
         .frame(width: model.documentWidth, alignment: .topTrailing)
+    }
+
+    @ViewBuilder
+    private func cueIcon(for row: CountdownRow) -> some View {
+        if reduceMotion {
+            Image(systemName: row.symbolName)
+        } else {
+            Image(systemName: row.symbolName)
+                .symbolEffect(.pulse, options: .repeating, isActive: row.shouldPulse)
+                .symbolEffect(.wiggle, options: .repeat(.periodic(5, delay: 1)), value: model.cueWiggles[row.id])
+        }
     }
 }
 

@@ -23,6 +23,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let navigation = SettingsNavigation()
     private lazy var session = CalendarSession(reader: EventKitCalendarReader(), state: state)
     private lazy var hud = CountdownHUDController(state: state, session: session)
+    private lazy var audioCues = AudioCueSession(state: state, player: SystemSoundPlayer()) { [weak self] cues in
+        self?.hud.showCueWiggles(for: cues.map(\.occurrence))
+    }
+    private var audioObservationGeneration = 0
+    private var sleeping = false
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var timer: Timer?
@@ -41,6 +46,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = item
         session.start()
         hud.start()
+        observeAudio()
         installObservers()
         let timer = Timer(timeInterval: 1, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
         RunLoop.main.add(timer, forMode: .common)
@@ -204,19 +210,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         for name in names {
             NotificationCenter.default.publisher(for: name)
                 .receive(on: DispatchQueue.main)
-                .sink { [weak self] _ in self?.session.invalidate() }
+                .sink { [weak self] _ in
+                    self?.audioCues.reset()
+                    self?.session.invalidate()
+                }
                 .store(in: &observers)
         }
         NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.didWakeNotification)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.session.invalidate() }
+            .sink { [weak self] _ in
+                self?.sleeping = false
+                self?.audioCues.reset()
+                self?.session.invalidate()
+            }
             .store(in: &observers)
+        NSWorkspace.shared.notificationCenter.publisher(for: NSWorkspace.willSleepNotification)
+            .sink { [weak self] _ in
+                MainActor.assumeIsolated {
+                    self?.sleeping = true
+                    self?.audioCues.reset()
+                }
+            }
+            .store(in: &observers)
+    }
+
+    private func observeAudio() {
+        audioObservationGeneration += 1
+        let token = audioObservationGeneration
+        withObservationTracking {
+            _ = state.preferences
+            _ = state.selectedCalendarIDs
+            _ = state.pauseUntil
+            _ = state.hiddenEvents
+            _ = session.status
+            _ = session.occurrences
+        } onChange: { [weak self] in
+            // All observed values are main-actor owned. Disarm synchronously,
+            // before a queued timer can cross a boundary using stale settings.
+            MainActor.assumeIsolated { self?.audioCues.reset() }
+            Task { @MainActor in
+                guard let self, self.audioObservationGeneration == token else { return }
+                self.observeAudio()
+                self.updateAudio()
+            }
+        }
+        updateAudio()
+    }
+
+    private func updateAudio() {
+        audioCues.update(occurrences: session.reminderOccurrences,
+                         isActive: !sleeping && session.status == .ready && !session.isPaused, at: Date())
     }
 
     @objc private func refreshCalendars() { Task { await session.refresh(); updateTitle() } }
 
     @objc private func tick() {
         session.tick()
+        updateAudio()
         updateTitle()
         tickCount += 1
         if tickCount % 30 == 0 { Task { await session.checkAccess() } }
@@ -232,7 +282,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             )
             window.title = "Meet Meet Settings"
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: SettingsView(state: state, session: session, hud: hud, navigation: navigation))
+            window.contentView = NSHostingView(rootView: SettingsView(state: state, session: session, hud: hud, audioCues: audioCues, navigation: navigation))
             window.center()
             settingsWindow = window
         }
@@ -245,6 +295,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         timer?.invalidate()
         observers.removeAll()
+        audioObservationGeneration += 1
+        audioCues.reset()
         hud.stop()
         session.stop()
     }
@@ -264,6 +316,7 @@ private struct SettingsView: View {
     let state: AppState
     let session: CalendarSession
     let hud: CountdownHUDController
+    let audioCues: AudioCueSession
     @Bindable var navigation: SettingsNavigation
     @State private var errorMessage: String?
     @State private var loginStatus = SMAppService.mainApp.status
@@ -317,7 +370,7 @@ private struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
-                Text("Preferences save immediately. Live countdowns follow your selected calendars; audio playback is not implemented yet.")
+                Text("Preferences save immediately. Live countdowns and optional sounds follow your selected calendars.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -328,22 +381,27 @@ private struct SettingsView: View {
         Form {
             Section("Before start") {
                 Toggle("Enable start cue", isOn: preference(\.startCue.isEnabled))
-                Picker("System sound", selection: preference(\.startCue.soundName)) {
+                Picker("Sound", selection: preference(\.startCue.soundName)) {
                     ForEach(soundNames, id: \.self) { Text($0).tag($0) }
                 }
                 IntegerSettingField("Before start", value: preference(\.startCue.offsetMinutes), range: 0...60, unit: "minutes")
+                Button("Preview start sound") { audioCues.preview(named: state.preferences.startCue.soundName) }
             }
             Section("Before end") {
                 Toggle("Enable end cue", isOn: preference(\.endCue.isEnabled))
-                Picker("System sound", selection: preference(\.endCue.soundName)) {
+                Picker("Sound", selection: preference(\.endCue.soundName)) {
                     ForEach(soundNames, id: \.self) { Text($0).tag($0) }
                 }
                 IntegerSettingField("Before end", value: preference(\.endCue.offsetMinutes), range: 0...60, unit: "minutes")
+                Button("Preview end sound") { audioCues.preview(named: state.preferences.endCue.soundName) }
             }
             Section("Playback") {
                 Slider(value: preference(\.audioVolume), in: 0...1) { Text("App volume") }
-                Text("Zero-minute offsets mean the meeting boundary. These preferences are saved; playback and Preview will be added with audio scheduling.")
+                Text("Zero-minute offsets mean the meeting boundary. App volume does not change system volume. Missed cues are skipped after interruptions; sounds are best-effort while the app is running.")
                     .font(.caption).foregroundStyle(.secondary)
+                if let error = audioCues.errorMessage {
+                    Label(error, systemImage: "exclamationmark.triangle").font(.callout)
+                }
             }
         }
         .formStyle(.grouped)
@@ -449,8 +507,7 @@ private struct SettingsView: View {
     }
 
     private var soundNames: [String] {
-        let files = (try? FileManager.default.contentsOfDirectory(atPath: "/System/Library/Sounds")) ?? []
-        let names = files.filter { $0.hasSuffix(".aiff") }.map { String($0.dropLast(5)) }
+        let names = SystemSoundPlayer.soundNames
         return Set(names + [state.preferences.startCue.soundName, state.preferences.endCue.soundName]).sorted()
     }
 

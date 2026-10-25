@@ -61,9 +61,7 @@ public struct MeetingPolicy: Sendable {
         }
 
         let eligible = occurrences.filter {
-            selectedCalendarIDs.contains($0.calendarID) && !$0.isAllDay && !$0.isCancelled &&
-            $0.attendance != .declined && $0.start.timeIntervalSinceReferenceDate.isFinite &&
-            $0.end.timeIntervalSinceReferenceDate.isFinite && $0.end > $0.start && $0.end > now
+            selectedCalendarIDs.contains($0.calendarID) && $0.isEligibleMeeting && $0.end > now
         }
         let leadSeconds = Double(preferences.hudLeadMinutes) * 60
         let remainingToday = eligible.filter { $0.start < day.end && $0.end > day.start }.sorted(by: startOrder)

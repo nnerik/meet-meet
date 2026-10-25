@@ -16,8 +16,8 @@ public struct AppPreferences: Codable, Equatable, Sendable {
     public var hudLeadMinutes = 30
     public var secondsThresholdMinutes = 5
     public var menuTitleLimit = 24
-    public var startCue = AudioCuePreference(soundName: "Glass", offsetMinutes: 1)
-    public var endCue = AudioCuePreference(soundName: "Ping", offsetMinutes: 2)
+    public var startCue = AudioCuePreference(soundName: "meet-meet", offsetMinutes: 1)
+    public var endCue = AudioCuePreference(soundName: "wrap-wrap", offsetMinutes: 2)
     public var audioVolume = 1.0
 
     public init() {}
@@ -75,7 +75,7 @@ public enum PreferenceError: Error, LocalizedError, Equatable {
         case .secondsThresholdMinutes: "Seconds threshold must be between 0 and 60 minutes."
         case .menuTitleLimit: "Menu title length must be between 8 and 80 characters."
         case .startOffset, .endOffset: "Audio offsets must be between 0 and 60 minutes."
-        case .soundName: "Choose a system sound for each cue."
+        case .soundName: "Choose a bundled or system sound for each cue."
         case .audioVolume: "Audio volume must be between 0 and 1."
         }
     }

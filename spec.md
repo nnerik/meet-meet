@@ -6,9 +6,9 @@ Status: approved product decisions, ready for implementation.
 
 A personal-first native macOS utility for noticing upcoming meetings and keeping ongoing meetings on time. Read the local EventKit store, including synced accounts, without a backend or calendar writes. Both upcoming and ongoing countdowns are core.
 
-MVP includes a persistent calendar menu, one floating countdown stack, calendar selection, permanent and temporary hiding, optional system sounds, and opt-in launch at login.
+MVP includes a persistent calendar menu, one floating countdown stack, calendar selection, permanent and temporary hiding, optional bundled/system sounds, and opt-in launch at login.
 
-Out of scope: accounts for this app, analytics/telemetry, a backend, custom audio files, public distribution, notarization, automatic updates, and older-OS compatibility work. No additional appearance controls were specified beyond system appearance; no other draft feature is silently deferred. No promise of waking the Mac, alarms after Quit, exact real-time playback, or visibility above every system/full-screen surface.
+Out of scope: accounts for this app, analytics/telemetry, a backend, user audio-file import, public distribution, notarization, automatic updates, and older-OS compatibility work. No additional appearance controls were specified beyond system appearance; no other draft feature is silently deferred. No promise of waking the Mac, alarms after Quit, exact real-time playback, or visibility above every system/full-screen surface.
 
 ## 2. Platform and boundaries
 
@@ -128,9 +128,10 @@ Use a calendar icon followed by time and summary when relevant:
 
 ## 9. Audio
 
-- System sounds only. No custom audio import. Two independent global opt-in cues: before start and before end; each has a sound and offset.
+- App-bundled MP3 cues plus system sounds. No custom audio import. Two independent global opt-in cues: before start and before end; each has a sound and offset. Default sounds are `meet-meet.mp3` before start and `wrap-wrap.mp3` before end; preserve existing saved sound choices.
 - Both default off. Suggested offsets: 1 minute before start and 2 minutes before end. Offsets 0–60 minutes; zero means at the boundary.
 - Provide Preview and app-level volume without changing system volume. Surface actionable playback failures.
+- Scheduled cues also wiggle each corresponding already-visible HUD icon five times, with a one-second pause between repeats, respecting Reduce Motion. Do not reveal hidden/out-of-window rows or retain ended rows for this effect. Preview does not trigger the HUD cue. Coincident cues animate all corresponding visible icons even when audio is coalesced.
 - Best-effort playback while running; no wake-from-sleep, after-Quit, or exact-deadline guarantee. Muted/unavailable output cannot guarantee audibility.
 - After sleep, late startup, pause or lost access, skip already-passed alerts. Settings changes also never replay missed sounds. Schedule future eligible cues after reconciliation.
 - At most once per occurrence per cue type, persisted across restarts. Edits may move an unplayed cue into the future but never replay a played/handled cue; backward clock changes do not replay it.
@@ -146,8 +147,8 @@ Use a calendar icon followed by time and summary when relevant:
 | HUD lead time | 30 minutes | 0–120 minutes; zero ongoing-only |
 | Seconds threshold | 5 minutes | 0–60 minutes; zero disables seconds |
 | Menu title limit | 24 characters | 8–80 characters |
-| Start audio | Off; suggested offset 1 minute | System sound, enable/disable, offset 0–60 minutes |
-| End audio | Off; suggested offset 2 minutes | System sound, enable/disable, offset 0–60 minutes |
+| Start audio | Off; meet-meet; suggested offset 1 minute | Bundled or system sound, enable/disable, offset 0–60 minutes |
+| End audio | Off; wrap-wrap; suggested offset 2 minutes | Bundled or system sound, enable/disable, offset 0–60 minutes |
 | Audio volume | Normal playback level | App-local volume, never system volume |
 | Calendar selection | Explicit onboarding choice | Available EventKit calendars; new calendars unselected |
 

@@ -191,4 +191,40 @@ func nativeHUDLayoutChangesDoNotOverwriteThePreferredPosition() async throws {
     #expect(state.hudPosition == preferred)
     #expect(storage.writes == writesBeforeLayout)
 }
+@Test @MainActor
+func nativeHUDCueWigglesOnlyCurrentlyVisibleRowsAndDoesNotRetriggerOnTicks() async throws {
+    let application = NSApplication.shared
+    let state = AppState(storage: NativeHUDMemoryStore())
+    try state.setSelectedCalendarIDs(["fixture"])
+    let session = CalendarSession(reader: NativeHUDCalendarFixture(count: 2), state: state)
+    await session.refresh()
+    let keys = session.presentation.hudRows.map(\.id)
+    #expect(keys.count == 2)
+    let before = Set(application.windows.map { ObjectIdentifier($0) })
+    let controller = CountdownHUDController(state: state, session: session)
+    let window = try #require(application.windows.first {
+        !before.contains(ObjectIdentifier($0)) && $0.identifier?.rawValue == "meetmeet.countdownHUD"
+    })
+    defer { controller.stop(); window.close() }
+    controller.start()
+    let frame = window.frame
+    let absent = OccurrenceKey(calendarID: "fixture", occurrenceID: "not-visible")
+    controller.showCueWiggles(for: keys + [absent])
+    let token = try #require(controller.cueWiggleToken(for: keys[0]))
+    #expect(controller.cueWiggleToken(for: keys[1]) != nil)
+    #expect(controller.cueWiggleToken(for: absent) == nil)
+    #expect(window.frame == frame)
+    session.tick()
+    try await Task.sleep(for: .milliseconds(20))
+    #expect(controller.cueWiggleToken(for: keys[0]) == token)
+    try session.pauseForToday()
+    #expect(await waitForHUD { !window.isVisible })
+    #expect(controller.cueWiggleToken(for: keys[0]) == nil)
+    controller.showCueWiggles(for: keys)
+    #expect(controller.cueWiggleToken(for: keys[0]) == nil)
+    #expect(!window.isVisible)
+    try session.resume()
+    #expect(await waitForHUD { window.isVisible })
+    #expect(controller.cueWiggleToken(for: keys[0]) == nil)
+}
 #endif

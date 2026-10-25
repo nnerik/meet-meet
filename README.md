@@ -13,8 +13,8 @@ countdown rows, formatting, ordering and pulse thresholds. Read-only EventKit
 access, explicit calendar selection and live menu summaries are now connected.
 Occurrence/series hiding and the recovery view are connected, as is temporary
 HUD-row suppression. Pause/Resume is available from the always-present menu.
-The floating countdown stack is now connected to live meetings. Onboarding,
-login enablement and audio playback are not implemented yet. The app loads no
+The floating countdown stack and optional audio cues are connected to live meetings. Onboarding
+and login enablement are not implemented yet. The app loads no
 prototype/dummy meetings.
 
 Open **Settings → Calendars → Allow Calendar Access**, then select calendars
@@ -35,6 +35,25 @@ displays recover onto the primary usable area. Spaces/full-screen visibility is
 best-effort where macOS permits, never a reason to switch Spaces or take focus.
 No stack is shown without an eligible ongoing meeting or upcoming meeting inside
 the configured lead time.
+
+**Settings → Audio** offers independent start/end cues (both off by default),
+bundled or system-sound selection, Preview and app-local volume. The bundled
+`media/meet-meet.mp3` and `media/wrap-wrap.mp3` are the start/end defaults for new
+settings; existing saved sound choices are preserved. Xcode copies these files
+into the app bundle, so playback does not depend on the source folder at runtime.
+Zero-minute offsets play
+at the boundary; end warnings before a short meeting's start are skipped.
+Only future cues are armed after startup, wake, pause, access loss or settings
+changes. Coincident cues play once (start wins), with all receipts persisted
+before playback. Handled cues do not replay after rescheduling or clock reversal.
+Unreadable safety records disable automatic sounds rather than risking repeats;
+Preview remains available. Playback errors appear in Audio settings. Playback is
+best-effort while the app runs; mute/output changes and sleep may prevent sound.
+No user-file import is supported and system volume is never changed.
+Scheduled cues also wiggle each corresponding visible HUD icon five times with
+a one-second pause between repeats, unless Reduce Motion is enabled. This never
+reveals a hidden countdown or retains an ended meeting. Preview does not animate
+the HUD; coincident cues animate all corresponding visible icons.
 
 **Pause for Today** keeps the menu and calendar refresh available but hides
 HUD rows and withholds audio-eligible input. Its next-local-midnight deadline
