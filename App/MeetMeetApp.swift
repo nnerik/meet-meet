@@ -22,6 +22,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let state = AppState(storage: UserDefaultsStateStore())
     private let navigation = SettingsNavigation()
     private lazy var session = CalendarSession(reader: EventKitCalendarReader(), state: state)
+    private lazy var hud = CountdownHUDController(state: state, session: session)
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var timer: Timer?
@@ -39,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         item.menu = menu
         statusItem = item
         session.start()
+        hud.start()
         installObservers()
         let timer = Timer(timeInterval: 1, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
         RunLoop.main.add(timer, forMode: .common)
@@ -230,7 +232,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             )
             window.title = "Meet Meet Settings"
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: SettingsView(state: state, session: session, navigation: navigation))
+            window.contentView = NSHostingView(rootView: SettingsView(state: state, session: session, hud: hud, navigation: navigation))
             window.center()
             settingsWindow = window
         }
@@ -243,6 +245,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         timer?.invalidate()
         observers.removeAll()
+        hud.stop()
         session.stop()
     }
 
@@ -260,6 +263,7 @@ private final class SettingsNavigation { var tab = SettingsTab.general }
 private struct SettingsView: View {
     let state: AppState
     let session: CalendarSession
+    let hud: CountdownHUDController
     @Bindable var navigation: SettingsNavigation
     @State private var errorMessage: String?
     @State private var loginStatus = SMAppService.mainApp.status
@@ -275,6 +279,9 @@ private struct SettingsView: View {
                 Label(error, systemImage: "exclamationmark.triangle").font(.callout).padding()
             }
             if let error = session.pausePersistenceError {
+                Label(error, systemImage: "exclamationmark.triangle").font(.callout).padding()
+            }
+            if let error = hud.positionError {
                 Label(error, systemImage: "exclamationmark.triangle").font(.callout).padding()
             }
             TabView(selection: $navigation.tab) {
@@ -310,7 +317,7 @@ private struct SettingsView: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
-                Text("Preferences save immediately. Floating countdowns and audio playback are not implemented yet.")
+                Text("Preferences save immediately. Live countdowns follow your selected calendars; audio playback is not implemented yet.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

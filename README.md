@@ -12,9 +12,10 @@ boundaries. Deterministic policies now cover event eligibility, menu selection,
 countdown rows, formatting, ordering and pulse thresholds. Read-only EventKit
 access, explicit calendar selection and live menu summaries are now connected.
 Occurrence/series hiding and the recovery view are connected, as is temporary
-HUD-row suppression in the policy layer. Pause/Resume is available from the
-always-present menu. Floating HUD windows, onboarding and
-audio playback are not implemented yet. No prototype/dummy meetings are loaded.
+HUD-row suppression. Pause/Resume is available from the always-present menu.
+The floating countdown stack is now connected to live meetings. Onboarding,
+login enablement and audio playback are not implemented yet. The app loads no
+prototype/dummy meetings.
 
 Open **Settings → Calendars → Allow Calendar Access**, then select calendars
 to monitor. Nothing is selected automatically. Permission is requested only
@@ -23,8 +24,17 @@ Denied/restricted access has a privacy-settings link; fetch errors have Retry.
 Open a meeting's submenu to hide its occurrence/series or suppress its
 countdown until the final minute. **Manage Hidden Events** opens the saved
 Meetings/Series rules with Unhide and confirmed Unhide All. Temporary hiding
-leaves the menu/audio eligibility intact; its actual HUD effect becomes visible
-when floating windows are connected.
+leaves the menu/audio eligibility intact and removes only that meeting's HUD row.
+
+Relevant meetings appear in one upper-right floating stack: bell for upcoming,
+play for ongoing, with a Reduce Motion-aware pulse during the final minute.
+Hover to reveal all titles, drag to move the entire stack, or scroll when rows
+exceed screen height. New/restored rows reveal titles for three elapsed seconds;
+reordering alone does not. Dragged position is saved locally, and disconnected
+displays recover onto the primary usable area. Spaces/full-screen visibility is
+best-effort where macOS permits, never a reason to switch Spaces or take focus.
+No stack is shown without an eligible ongoing meeting or upcoming meeting inside
+the configured lead time.
 
 **Pause for Today** keeps the menu and calendar refresh available but hides
 HUD rows and withholds audio-eligible input. Its next-local-midnight deadline
@@ -49,7 +59,7 @@ target is macOS 26.0; the SDK version is not the deployment target.
 make build       # Build the app with local ad-hoc signing
 make run         # Build and open the persistent calendar menu
 make test        # Deterministic core tests via Swift Package Manager
-make test-xcode  # The same tests through the shared Xcode scheme
+make test-xcode  # Core tests plus native HUD checks (brief fixture window)
 make verify     # Verify the built signature and inspect entitlements
 ```
 
@@ -73,8 +83,13 @@ when explicitly testing a different supported architecture.
   or EventKit.
 - `MeetingPolicy` consumes an explicit timestamp and calendar timezone and
   returns today's remaining meetings, menu summary and HUD rows. No timers or
-  UI objects are involved. The live menu consumes this policy; the native HUD
-  will use the same rows rather than duplicate the policy.
+  UI objects are involved. The menu and native HUD consume this same policy.
+- `App/CountdownHUDController.swift` owns the nonactivating panel and passive
+  SwiftUI rows, native dragging/scrolling and display recovery. Pure
+  `HUDLayoutPolicy` tests placement/clamping/overflow without windows;
+  `HUDRevealState` uses elapsed monotonic time for arrival-title timing.
+  Native window-move notifications save the authoritative anchor; controller
+  layout moves are excluded so refreshes and title expansion cannot reset it.
 - `App/EventKitCalendarReader.swift` owns its EventKit store on an actor and
   converts events to immutable values, retaining recurrence/exception evidence
   without calendar writes. `CalendarSession` handles access, coalesced refresh,
@@ -86,12 +101,18 @@ when explicitly testing a different supported architecture.
 - `MenuBarState` gives pause priority over calendar status and meeting summaries;
   the dropdown still exposes the underlying status and meeting details. Menu
   entries include full-title tooltips/accessibility labels, calendar and times.
-- `Tests/MeetMeetCoreTests/`: Swift Testing cases, shared by SwiftPM and Xcode;
-  no real calendars, permission prompts, network requests or timer waits.
+- `Tests/MeetMeetCoreTests/`: shared deterministic Swift Testing cases, with no
+  real calendars, permission prompts, network requests or timer waits in core
+  tests. Xcode additionally compiles the native controller for passive-window
+  configuration, scrolling and appearance/pause/resume focus checks. Those
+  native checks require a GUI session and briefly show a fixture HUD, with
+  bounded async UI waits. They never read the user's calendars.
 
 Keep calendar access read-only. Store no event-content logs or telemetry. Real
 provider identity and production lifecycle/accessibility checks belong to the
-integration acceptance tickets, not to this initial scaffold.
+integration acceptance tickets. Actual pointer dragging/wheel input, Spaces,
+full-screen, display unplugging and VoiceOver still need live acceptance;
+geometry and window-configuration tests do not prove that whole matrix.
 
 State uses app-local UserDefaults data records. Loading does not rewrite saved
 data: malformed preference fields fall back individually, unreadable records
