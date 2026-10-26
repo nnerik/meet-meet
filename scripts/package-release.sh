@@ -101,5 +101,9 @@ cp "releases/$version.md" "$output/RELEASE-NOTES.md"
     cd "$output"
     shasum -a 256 "$name" > "$name.sha256"
     shasum -a 256 -c "$name.sha256"
+    # GitHub's /releases/latest/download/ URL resolves a stable asset name.
+    cp "$name" MeetMeet-latest-arm64.dmg
+    shasum -a 256 MeetMeet-latest-arm64.dmg > MeetMeet-latest-arm64.dmg.sha256
+    shasum -a 256 -c MeetMeet-latest-arm64.dmg.sha256
 )
 echo "Release artifacts: $output"

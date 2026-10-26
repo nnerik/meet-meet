@@ -45,6 +45,17 @@ production app or request real calendar access. Outputs are in
 Existing DMG output is not overwritten. Temporary build/mount directories are
 cleaned up on exit. Build and packaging checks are not a Gatekeeper approval.
 
+Packaging also creates byte-identical `MeetMeet-latest-arm64.dmg` and a matching
+checksum. Each release includes these fixed-name aliases alongside the versioned
+assets, so GitHub can redirect these URLs to the release marked Latest:
+
+- https://github.com/nnerik/meet-meet/releases/latest/download/MeetMeet-latest-arm64.dmg
+- https://github.com/nnerik/meet-meet/releases/latest/download/MeetMeet-latest-arm64.dmg.sha256
+
+Use the versioned URLs when pinning a particular release. To add aliases to an
+older release, copy its original DMG without rebuilding, generate the matching
+checksum, and upload the two additional assets without replacing originals.
+
 ## Publish with GitHub Actions
 
 The repository must allow GitHub Actions and the workflow's `contents: write`
@@ -76,15 +87,9 @@ without publishing. Failed native runs print their test summary and retain the
 Xcode test results for seven days so CI-only assertions can be investigated.
 
 If CI is unavailable, package locally from the exact clean tagged commit and use
-`gh release create --verify-tag --draft`, upload the three artifacts, then publish
-only after inspecting them. Never publish build output from a different revision.
-
-## Before making the repository public
-
-The owner changes visibility in GitHub settings. Review the full Git history,
-issues and other repository content for credentials/private material first;
-adding a license is not a security audit. Confirm the public release and install
-links work without authentication afterward.
+`gh release create --verify-tag --draft`, upload both DMG/checksum pairs and build
+information, then publish only after inspecting them. Never publish build output
+from a different revision.
 
 ## Smoke-test a downloaded release
 

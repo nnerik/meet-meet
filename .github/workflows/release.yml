@@ -65,5 +65,7 @@ jobs:
           gh release upload "$RELEASE_TAG" \
             "$output/MeetMeet-$version-arm64.dmg" \
             "$output/MeetMeet-$version-arm64.dmg.sha256" \
+            "$output/MeetMeet-latest-arm64.dmg" \
+            "$output/MeetMeet-latest-arm64.dmg.sha256" \
             "$output/BUILD-INFO.txt"
           gh release edit "$RELEASE_TAG" --draft=false --latest
