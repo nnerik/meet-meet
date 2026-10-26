@@ -4,6 +4,24 @@ A native macOS menu bar utility for upcoming and ongoing meeting countdowns.
 The approved behavior is in [`spec.md`](spec.md); implementation is tracked in
 the [MVP backlog](https://github.com/nnerik/meet-meet/issues/12).
 
+## Download and install
+
+**Apple silicon (M1 or newer), macOS 26+.** Download the DMG from
+[GitHub Releases](https://github.com/nnerik/meet-meet/releases/latest), then drag
+the app to Applications. These builds are **ad-hoc signed and not notarized**:
+macOS may block first launch. After attempting to open it, use **System Settings
+→ Privacy & Security → Open Anyway** only if you trust the download. Do not
+disable Gatekeeper. Managed Macs may not permit the override.
+
+See [installation, checksum and update instructions](docs/installation.md).
+Updates are manual; calendar access may need to be granted again, while settings
+should remain saved. Meet Meet runs in the menu bar, without a Dock icon.
+
+## License
+
+The source code and bundled artwork and sounds are licensed under the
+[MIT License](LICENSE).
+
 ## Current status
 
 The app currently has a sandboxed agent foundation, persistent calendar menu,
@@ -105,6 +123,7 @@ make run         # Build and open the persistent calendar menu
 make test        # Deterministic core tests via Swift Package Manager
 make test-xcode  # Core tests plus native HUD checks (brief fixture window)
 make verify     # Verify the built signature and inspect entitlements
+make release VERSION=0.1.0  # Test and package an arm64 DMG from a clean tree
 ```
 
 Or open `MeetMeet.xcodeproj`, select **MeetMeet**, and Run/Test. Settings and
@@ -115,6 +134,9 @@ Build output goes to ignored `build/DerivedData`. `make CONFIGURATION=Release
 build` builds Release. Quit the running app before rebuilding to inspect a new
 version. The target architecture defaults to this Mac; override `DESTINATION`
 when explicitly testing a different supported architecture.
+
+See [release management](docs/releases.md) for version tags, GitHub Actions
+publishing, packaging checks and distribution limitations.
 
 ## Code layout
 

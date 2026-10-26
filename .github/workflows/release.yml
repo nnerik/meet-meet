@@ -1,0 +1,49 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-26
+    timeout-minutes: 30
+    permissions:
+      contents: write
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate tag and package tested release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: bash scripts/package-release.sh "${RELEASE_TAG#v}"
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="${RELEASE_TAG#v}"
+          output="build/releases/$version"
+          # A failed upload leaves a draft, never a partially published release.
+          # Existing releases are not overwritten; inspect/delete a failed draft
+          # manually before rerunning this job.
+          gh release create "$RELEASE_TAG" --verify-tag --draft \
+            --title "Meet Meet $version" --notes-file "$output/RELEASE-NOTES.md"
+          gh release upload "$RELEASE_TAG" \
+            "$output/MeetMeet-$version-arm64.dmg" \
+            "$output/MeetMeet-$version-arm64.dmg.sha256" \
+            "$output/BUILD-INFO.txt"
+          gh release edit "$RELEASE_TAG" --draft=false --latest
