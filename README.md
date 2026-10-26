@@ -132,6 +132,11 @@ when explicitly testing a different supported architecture.
   `HUDRevealState` uses elapsed monotonic time for arrival-title timing.
   Native window-move notifications save the authoritative anchor; controller
   layout moves are excluded so refreshes and title expansion cannot reset it.
+  Accessibility hit-testing routes directly to the SwiftUI document (or native
+  scroller), separately from pointer capture for dragging. This lets the
+  VoiceOver cursor target individual rows without giving the HUD keyboard focus.
+  Spoken countdown values use full units (for example, “Starts in 8 minutes”),
+  with the same rounding/precision as the compact on-screen text.
 - `App/EventKitCalendarReader.swift` owns its EventKit store on an actor and
   converts events to immutable values, retaining recurrence/exception evidence
   without calendar writes. `CalendarSession` handles access, coalesced refresh,
@@ -162,6 +167,10 @@ when explicitly testing a different supported architecture.
   native checks require a GUI session and briefly show a fixture HUD, with
   bounded async UI waits. Setup rendering uses fake calendar/login services;
   tests never request real permission or register a login item.
+  The HUD accessibility test initializes/restores the assistive-technology
+  bridge only in its test process and inspects SwiftUI's bridged AX nodes,
+  including the exact pointer target with titles expanded/collapsed. It never
+  enables system VoiceOver. Actual speech/navigation still needs owner testing.
 
 Keep calendar access read-only. Store no event-content logs or telemetry. Real
 provider identity and production lifecycle/accessibility checks belong to the

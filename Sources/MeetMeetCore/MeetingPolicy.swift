@@ -35,6 +35,7 @@ public struct CountdownRow: Identifiable, Equatable, Sendable {
     public let boundary: Date
     public let remaining: TimeInterval
     public let text: String
+    public let accessibilityValue: String
     public let shouldPulse: Bool
 
     public var id: OccurrenceKey { meeting.key }
@@ -89,6 +90,7 @@ public struct MeetingPolicy: Sendable {
             return CountdownRow(
                 meeting: meeting, phase: ongoing ? .ongoing : .upcoming, boundary: boundary,
                 remaining: remaining, text: MeetingText.countdown(remaining, secondsThresholdMinutes: preferences.secondsThresholdMinutes),
+                accessibilityValue: "\(ongoing ? "Ends in" : "Starts in") " + MeetingText.spokenCountdown(remaining, secondsThresholdMinutes: preferences.secondsThresholdMinutes),
                 shouldPulse: remaining > 0 && remaining <= 60
             )
         }.sorted { $0.boundary == $1.boundary ? stableOrder($0.meeting, $1.meeting) : $0.boundary < $1.boundary }

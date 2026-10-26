@@ -43,6 +43,26 @@ func eligibilityExcludesOnlyTheAgreedCases() throws {
 }
 
 @Test
+func countdownAccessibilitySpellsOutMinutesWithoutChangingVisibleText() throws {
+    let upcoming = try #require(present([meeting("upcoming", start: 480)]).hudRows.first)
+    #expect(upcoming.text == "8m")
+    #expect(upcoming.accessibilityValue == "Starts in 8 minutes")
+    let ongoing = try #require(present([meeting("ongoing", start: -60, duration: 540)]).hudRows.first)
+    #expect(ongoing.text == "8m")
+    #expect(ongoing.accessibilityValue == "Ends in 8 minutes")
+}
+
+@Test(arguments: [
+    (0, 5, "0 minutes"), (0.1, 5, "1 second"), (59, 5, "59 seconds"),
+    (60, 5, "1 minute"), (61, 5, "1 minute 1 second"), (125, 5, "2 minutes 5 seconds"),
+    (300, 5, "5 minutes"), (301, 5, "6 minutes"), (61, 0, "2 minutes"),
+    (3_600, 5, "1 hour"), (3_660, 5, "1 hour 1 minute"), (7_200, 5, "2 hours"),
+] as [(TimeInterval, Int, String)])
+func spokenCountdownUsesWholeUnitsAndMatchesVisibleRounding(remaining: TimeInterval, threshold: Int, expected: String) {
+    #expect(MeetingText.spokenCountdown(remaining, secondsThresholdMinutes: threshold) == expected)
+}
+
+@Test
 func emptySelectionProducesNoMeetings() throws {
     let result = try present([meeting("one")], selected: [])
     #expect(result.remainingToday.isEmpty)

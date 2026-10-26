@@ -311,7 +311,7 @@ private struct CountdownRowsView: View {
                 .frame(width: model.documentWidth, height: HUDLayoutPolicy.rowHeight, alignment: .trailing)
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(row.title)
-                .accessibilityValue("\(row.phase == .upcoming ? "Starts in" : "Ends in") \(row.text)")
+                .accessibilityValue(row.accessibilityValue)
                 .accessibilityHint(model.positionError ?? "Drag the stack to move it. Meeting actions are in the calendar menu.")
             }
         }
@@ -397,6 +397,31 @@ private final class HUDInteractionView: NSView {
             ancestor = current.superview
         }
         return self
+    }
+
+    override func accessibilityHitTest(_ point: NSPoint) -> Any? {
+        // AppKit serves this synchronous accessibility callback on the main
+        // thread, but its legacy declaration is nonisolated. Keep the returned
+        // non-Sendable AX object in this stack frame; never send it to a task.
+        nonisolated(unsafe) var target: Any?
+        MainActor.assumeIsolated { target = accessibilityTarget(at: point) }
+        return target
+    }
+
+    @MainActor private func accessibilityTarget(at point: NSPoint) -> Any? {
+        // Pointer capture for whole-stack dragging must not capture the
+        // VoiceOver cursor. Accessibility points are bottom-left screen
+        // coordinates; the hosting document resolves its actual SwiftUI rows.
+        guard let window else { return super.accessibilityHitTest(point) }
+        let windowPoint = window.convertPoint(fromScreen: point)
+        guard bounds.contains(convert(windowPoint, from: nil)) else {
+            return super.accessibilityHitTest(point)
+        }
+        if let scroller = scrollView.verticalScroller, !scroller.isHidden,
+           scroller.bounds.contains(scroller.convert(windowPoint, from: nil)) {
+            return scroller.accessibilityHitTest(point)
+        }
+        return document.accessibilityHitTest(point) ?? super.accessibilityHitTest(point)
     }
 
     // Route content drags explicitly; the window delegate also captures native

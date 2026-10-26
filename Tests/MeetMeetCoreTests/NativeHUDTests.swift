@@ -31,10 +31,10 @@ private actor NativeHUDCalendarFixture: CalendarReading {
         }
     }
     func access() -> CalendarAccess { .fullAccess }
-    func addMeeting() {
+    func addMeeting(startsIn seconds: TimeInterval = 120) {
         let now = Date()
         events.append(MeetingOccurrence(id: "native-fixture-\(events.count)", calendarID: "fixture", title: "Another fixture",
-                                        start: now.addingTimeInterval(120), end: now.addingTimeInterval(600)))
+                                        start: now.addingTimeInterval(seconds), end: now.addingTimeInterval(600)))
     }
     func requestAccess() -> CalendarAccess { .fullAccess }
     func calendars() -> [CalendarDescriptor] { [CalendarDescriptor(id: "fixture", title: "Fixture", sourceTitle: "Test")] }
@@ -226,5 +226,117 @@ func nativeHUDCueWigglesOnlyCurrentlyVisibleRowsAndDoesNotRetriggerOnTicks() asy
     try session.resume()
     #expect(await waitForHUD { window.isVisible })
     #expect(controller.cueWiggleToken(for: keys[0]) == nil)
+}
+@MainActor private final class SilentHUDSoundPlayer: SystemSoundPlaying {
+    func play(named name: String, volume: Double) {}
+}
+
+@Test(arguments: [2, 30]) @MainActor
+func nativeHUDColdLaunchWithNoMeetingsRespectsConfiguredLead(leadMinutes: Int) async throws {
+    let application = NSApplication.shared
+    let state = AppState(storage: NativeHUDMemoryStore())
+    try state.setSelectedCalendarIDs(["fixture"])
+    try state.updatePreferences { $0.hudLeadMinutes = leadMinutes }
+    let reader = NativeHUDCalendarFixture(count: 0)
+    let live = MeetingSession(reader: reader, state: state, player: SilentHUDSoundPlayer())
+    let before = Set(application.windows.map { ObjectIdentifier($0) })
+    let controller = CountdownHUDController(state: state, session: live.calendarSession)
+    let window = try #require(application.windows.first {
+        !before.contains(ObjectIdentifier($0)) && $0.identifier?.rawValue == "meetmeet.countdownHUD"
+    })
+    live.start()
+    controller.start()
+    defer { controller.stop(); live.stop(); window.close() }
+    await live.refresh()
+    #expect(await waitForHUD { live.calendarSession.status == .ready && !window.isVisible })
+    for _ in 0..<3 {
+        live.tick()
+        try await Task.sleep(for: .milliseconds(20))
+    }
+    await reader.addMeeting(startsIn: 300)
+    live.invalidate()
+    await live.refresh()
+    #expect(!live.menuBarState.text(titleLimit: 24, formatTime: { _ in "12:00" }).isEmpty)
+    let shouldShowHUD = leadMinutes >= 5
+    #expect(live.presentation.hudRows.count == (shouldShowHUD ? 1 : 0))
+    #expect(await waitForHUD { window.isVisible == shouldShowHUD })
+    if shouldShowHUD {
+        #expect(NSScreen.screens.contains { $0.visibleFrame.intersects(window.frame) })
+    }
+}
+@MainActor
+private func hudAccessibilityDescriptions(from root: any NSObjectProtocol) -> [String] {
+    var visited: Set<ObjectIdentifier> = []
+    func visit(_ element: any NSObjectProtocol) -> [String] {
+        guard visited.count < 200, visited.insert(ObjectIdentifier(element)).inserted else { return [] }
+        // SwiftUI's bridged nodes implement the Objective-C accessibility
+        // getters without declaring conformance to NSAccessibilityProtocol.
+        func property(_ name: String) -> Any? {
+            let selector = NSSelectorFromString(name)
+            guard element.responds(to: selector) else { return nil }
+            return element.perform(selector)?.takeUnretainedValue()
+        }
+        var descriptions: [String] = []
+        for name in ["accessibilityLabel", "accessibilityTitle", "accessibilityValue", "accessibilityValueDescription"] {
+            if let text = property(name) as? String { descriptions.append(text) }
+        }
+        for child in property("accessibilityChildren") as? [Any] ?? [] {
+            if let object = child as? any NSObjectProtocol { descriptions += visit(object) }
+        }
+        if let app = element as? NSApplication {
+            for window in app.accessibilityWindows() as? [NSObject] ?? [] { descriptions += visit(window) }
+        }
+        return descriptions
+    }
+    return visit(root)
+}
+
+@Test @MainActor
+func nativeHUDExposesMeetingRowsInTheApplicationAccessibilityTree() async throws {
+    let application = NSApplication.shared
+    // Initialize SwiftUI's assistive-technology bridge in this test process
+    // only; do not enable system VoiceOver or request Accessibility permission.
+    // AppKit exposes this attribute only through its legacy attribute interface.
+    let enhancedUI = NSAccessibility.Attribute(rawValue: "AXEnhancedUserInterface")
+    let wasEnhanced = application.accessibilityAttributeValue(enhancedUI)
+    application.accessibilitySetValue(true, forAttribute: enhancedUI)
+    defer { application.accessibilitySetValue(wasEnhanced, forAttribute: enhancedUI) }
+    let state = AppState(storage: NativeHUDMemoryStore())
+    try state.setSelectedCalendarIDs(["fixture"])
+    let session = CalendarSession(reader: NativeHUDCalendarFixture(count: 1), state: state)
+    await session.refresh()
+    let before = Set(application.windows.map { ObjectIdentifier($0) })
+    let controller = CountdownHUDController(state: state, session: session)
+    let window = try #require(application.windows.first {
+        !before.contains(ObjectIdentifier($0)) && $0.identifier?.rawValue == "meetmeet.countdownHUD"
+    })
+    defer { controller.stop(); window.close() }
+    controller.start()
+    window.contentView?.layoutSubtreeIfNeeded()
+    #expect(await waitForHUD {
+        hudAccessibilityDescriptions(from: application).contains("Native HUD fixture 1")
+    })
+    #expect(hudAccessibilityDescriptions(from: window).contains("Native HUD fixture 1"))
+    #expect(hudAccessibilityDescriptions(from: window).contains("Starts in 2 minutes"))
+    let hit = try #require(window.accessibilityHitTest(NSPoint(x: window.frame.midX, y: window.frame.midY)) as? any NSObjectProtocol)
+    #expect(hudAccessibilityDescriptions(from: hit).contains("Native HUD fixture 1"))
+    let hitLabel = hit.perform(NSSelectorFromString("accessibilityLabel"))?.takeUnretainedValue() as? String
+    #expect(hitLabel == "Native HUD fixture 1", Comment(rawValue: "Pointer target: \(type(of: hit))"))
+    let content = try #require(window.contentView)
+    #expect(content.hitTest(NSPoint(x: content.bounds.midX, y: content.bounds.midY)) === content)
+    let expandedWidth = window.frame.width
+    let exit = try #require(NSEvent.mouseEvent(with: .mouseMoved, location: .zero, modifierFlags: [], timestamp: 0,
+                                              windowNumber: window.windowNumber, context: nil,
+                                              eventNumber: 0, clickCount: 0, pressure: 0))
+    window.contentView?.mouseExited(with: exit)
+    try await Task.sleep(for: .milliseconds(3_100))
+    #expect(window.frame.width < expandedWidth)
+    #expect(hudAccessibilityDescriptions(from: application).contains("Native HUD fixture 1"))
+    #expect(hudAccessibilityDescriptions(from: window).contains("Native HUD fixture 1"))
+    #expect(hudAccessibilityDescriptions(from: window).contains("Starts in 2 minutes"))
+    let collapsedHit = try #require(window.accessibilityHitTest(NSPoint(x: window.frame.midX, y: window.frame.midY)) as? any NSObjectProtocol)
+    let collapsedLabel = collapsedHit.perform(NSSelectorFromString("accessibilityLabel"))?.takeUnretainedValue() as? String
+    #expect(collapsedLabel == "Native HUD fixture 1")
+    #expect(!window.canBecomeKey)
 }
 #endif
