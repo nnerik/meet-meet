@@ -107,7 +107,7 @@ public final class AppState {
     }
 
     public func setHUDPosition(_ position: HUDPosition?) throws {
-        if let position, !position.topRightX.isFinite || !position.topRightY.isFinite {
+        if let position, !position.isFinite {
             throw AppStateError.invalidPosition
         }
         try save(position, record: .hudPosition)

@@ -89,7 +89,7 @@ Use a calendar icon followed by time and summary when relevant:
 
 ### Placement and accessibility
 
-- Initial placement: upper-right of the primary display's usable area. Persist the dragged stack location across restarts.
+- Initial placement: lower-right of the primary display's usable area. Anchor the HUD at its lower-right corner so it grows upward. Persist the dragged anchor as offsets from the display's usable lower-right corner across restarts and screen-size changes.
 - Anchor the right edge during expansion; temporarily shift if necessary to keep expansion onscreen. Keep the stack within usable bounds.
 - Only one stack, draggable between displays. Show across Spaces and over full-screen apps where macOS permits, without a universal always-on-top guarantee.
 - Recover onto the primary display if its display disappears. Re-evaluate usable bounds on display configuration changes.

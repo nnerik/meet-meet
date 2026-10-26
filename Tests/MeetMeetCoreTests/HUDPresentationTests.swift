@@ -16,10 +16,10 @@ private func hudLayout(rows: Int = 2, expanded: Bool = false, characters: Int = 
 }
 
 @Test
-func initialHUDUsesPrimaryUsableAreaAndTopRightMargins() throws {
+func initialHUDUsesPrimaryUsableAreaAndBottomRightMargins() throws {
     let layout = try hudLayout()
     #expect(layout.frame.maxX == 1_416)
-    #expect(layout.frame.maxY == 876)
+    #expect(layout.frame.minY == 24)
     #expect(layout.frame.width == 145)
     #expect(layout.frame.height == 116)
     #expect(layout.documentSize.height == 116)
@@ -28,11 +28,11 @@ func initialHUDUsesPrimaryUsableAreaAndTopRightMargins() throws {
 
 @Test
 func expansionAnchorsTheRightEdgeAndCollapsesBackWithoutMovingTheSavedAnchor() throws {
-    let position = HUDPosition(topRightX: 1_000, topRightY: 800, displayID: "primary")
+    let position = HUDPosition(rightOffset: 440, bottomOffset: 100, displayID: "primary")
     let compact = try hudLayout(position: position)
     let expanded = try hudLayout(expanded: true, position: position)
     #expect(expanded.frame.maxX == compact.frame.maxX)
-    #expect(expanded.frame.maxY == compact.frame.maxY)
+    #expect(expanded.frame.minY == compact.frame.minY)
     #expect(expanded.frame.width == 347)
     #expect(expanded.titleWidth == 190)
     #expect(try hudLayout(position: position).frame == compact.frame)
@@ -40,7 +40,7 @@ func expansionAnchorsTheRightEdgeAndCollapsesBackWithoutMovingTheSavedAnchor() t
 
 @Test
 func leftEdgeExpansionShiftsTemporarilyRatherThanChangingPreference() throws {
-    let position = HUDPosition(topRightX: 160, topRightY: 800, displayID: "primary")
+    let position = HUDPosition(rightOffset: 1_280, bottomOffset: 100, displayID: "primary")
     let compact = try hudLayout(position: position)
     let expanded = try hudLayout(expanded: true, position: position)
     #expect(compact.frame.minX == 15)
@@ -73,17 +73,17 @@ func manyRowsConstrainHeightAndRetainScrollableDocument() throws {
 
 @Test
 func placementSupportsNegativeCoordinatesAndSavedDisplays() throws {
-    let position = HUDPosition(topRightX: -100, topRightY: 800, displayID: "secondary")
+    let position = HUDPosition(rightOffset: 100, bottomOffset: 100, displayID: "secondary")
     let layout = try hudLayout(expanded: true, position: position, displays: [primaryHUDDisplay, secondaryHUDDisplay])
     #expect(layout.displayID == "secondary")
     #expect(layout.frame.maxX == -100)
-    #expect(layout.frame.maxY == 800)
+    #expect(layout.frame.minY == 200)
     #expect(secondaryHUDDisplay.workArea.contains(layout.frame))
 }
 
 @Test
 func missingDisplayRecoversToPrimaryEvenWhenCoordinatesOverlapAnotherDisplay() throws {
-    let position = HUDPosition(topRightX: -100, topRightY: 800, displayID: "unplugged")
+    let position = HUDPosition(rightOffset: 100, bottomOffset: 100, displayID: "unplugged")
     let displays = [primaryHUDDisplay, secondaryHUDDisplay]
     #expect(HUDLayoutPolicy.needsPositionRecovery(position, displays: displays))
     let layout = try hudLayout(position: position, displays: displays)
@@ -93,18 +93,19 @@ func missingDisplayRecoversToPrimaryEvenWhenCoordinatesOverlapAnotherDisplay() t
 
 @Test
 func resizedWorkAreaClampsOffscreenAnchorsAndAcceptsExactScreenEdges() throws {
-    let position = HUDPosition(topRightX: 4_000, topRightY: -1_000, displayID: "primary")
+    let position = HUDPosition(rightOffset: -4_000, bottomOffset: -1_000, displayID: "primary")
     #expect(HUDLayoutPolicy.needsPositionRecovery(position, displays: [primaryHUDDisplay]))
     #expect(primaryHUDDisplay.workArea.contains(try hudLayout(position: position).frame))
-    let edge = HUDPosition(topRightX: 1_440, topRightY: 900, displayID: "primary")
+    let edge = HUDPosition(rightOffset: 0, bottomOffset: 0, displayID: "primary")
     #expect(!HUDLayoutPolicy.needsPositionRecovery(edge, displays: [primaryHUDDisplay]))
 }
 
 @Test
 func unscopedLegacyPositionsUseTheDisplayContainingTheirAnchor() throws {
-    let position = HUDPosition(topRightX: -100, topRightY: 800)
+    let data = Data(#"{"topRightX":-100,"topRightY":800}"#.utf8)
+    let position = try JSONDecoder().decode(HUDPosition.self, from: data)
     #expect(try hudLayout(position: position, displays: [primaryHUDDisplay, secondaryHUDDisplay]).displayID == "secondary")
-    #expect(!HUDLayoutPolicy.needsPositionRecovery(position, displays: [primaryHUDDisplay, secondaryHUDDisplay]))
+    #expect(HUDLayoutPolicy.needsPositionRecovery(position, displays: [primaryHUDDisplay, secondaryHUDDisplay]))
 }
 
 @Test
@@ -125,7 +126,7 @@ func unavailableOrInvalidDisplaysAndEmptyRowsDoNotProduceAWindow() {
 
 @Test
 func nonfiniteSavedPositionFallsBackWithoutProducingInvalidFrames() throws {
-    let position = HUDPosition(topRightX: .nan, topRightY: .infinity, displayID: "primary")
+    let position = HUDPosition(rightOffset: .nan, bottomOffset: .infinity, displayID: "primary")
     #expect(HUDLayoutPolicy.needsPositionRecovery(position, displays: [primaryHUDDisplay]))
     #expect(try hudLayout(position: position).frame == hudLayout().frame)
 }
@@ -138,6 +139,62 @@ func smallUsableAreasStillContainTheWindow() throws {
     #expect(layout.needsScrolling)
     #expect(layout.titleWidth >= 0)
     #expect(layout.timerWidth > 0)
+}
+
+@Test
+func rowChangesGrowUpwardAndReturnToTheSameBottomRightAnchor() throws {
+    let position = HUDPosition(rightOffset: 40, bottomOffset: 60, displayID: "primary")
+    let single = try hudLayout(rows: 1, position: position)
+    let stack = try hudLayout(rows: 5, position: position)
+    #expect(stack.frame.minY == single.frame.minY)
+    #expect(stack.frame.maxX == single.frame.maxX)
+    #expect(stack.frame.maxY > single.frame.maxY)
+    #expect(try hudLayout(rows: 1, position: position).frame == single.frame)
+}
+
+@Test
+func savedOffsetsSurviveDisplayResizingAndRelocation() throws {
+    let original = try hudLayout(position: HUDPosition(rightOffset: 80, bottomOffset: 70, displayID: "secondary"),
+                                 displays: [primaryHUDDisplay, secondaryHUDDisplay])
+    let saved = try #require(HUDLayoutPolicy.position(for: original.frame, displays: [primaryHUDDisplay, secondaryHUDDisplay]))
+    let restored = try JSONDecoder().decode(HUDPosition.self, from: JSONEncoder().encode(saved))
+    let resized = HUDDisplay(id: "secondary", workArea: CGRect(x: 200, y: -600, width: 1_000, height: 600))
+    let layout = try hudLayout(position: restored, displays: [primaryHUDDisplay, resized])
+    #expect(layout.displayID == "secondary")
+    #expect(resized.workArea.maxX - layout.frame.maxX == 80)
+    #expect(layout.frame.minY - resized.workArea.minY == 70)
+    #expect(!HUDLayoutPolicy.needsPositionRecovery(restored, displays: [primaryHUDDisplay, resized]))
+}
+
+@Test
+func heightClampingDoesNotChangeThePreferredBottomAnchor() throws {
+    let position = HUDPosition(rightOffset: 40, bottomOffset: 700, displayID: "primary")
+    let single = try hudLayout(rows: 1, position: position)
+    let stack = try hudLayout(rows: 5, position: position)
+    #expect(stack.frame.maxY == primaryHUDDisplay.workArea.maxY)
+    #expect(stack.frame.minY < single.frame.minY)
+    #expect(!HUDLayoutPolicy.needsPositionRecovery(position, displays: [primaryHUDDisplay]))
+    #expect(try hudLayout(rows: 1, position: position).frame == single.frame)
+}
+
+@Test
+func legacyAbsolutePositionsMigrateToDisplayRelativeBottomAnchors() throws {
+    let data = Data(#"{"topRightX":-100,"topRightY":800,"displayID":"secondary"}"#.utf8)
+    let legacy = try JSONDecoder().decode(HUDPosition.self, from: data)
+    let displays = [primaryHUDDisplay, secondaryHUDDisplay]
+    #expect(HUDLayoutPolicy.needsPositionRecovery(legacy, displays: displays))
+    let layout = try hudLayout(rows: 1, position: legacy, displays: displays)
+    #expect(layout.frame.maxX == -100)
+    #expect(layout.frame.maxY == 800)
+    let migrated = try #require(HUDLayoutPolicy.position(for: layout.frame, displays: displays))
+    #expect(migrated.rightOffset == 100)
+    #expect(migrated.bottomOffset == 642)
+    #expect(!HUDLayoutPolicy.needsPositionRecovery(migrated, displays: displays))
+    let encoded = try JSONEncoder().encode(migrated)
+    let fields = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+    #expect(fields["topRightX"] == nil)
+    #expect(fields["topRightY"] == nil)
+    #expect(try hudLayout(rows: 1, position: migrated, displays: displays).frame == layout.frame)
 }
 
 @Test

@@ -171,7 +171,9 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         if HUDLayoutPolicy.needsPositionRecovery(transientPosition ?? state.hudPosition, displays: displays),
            let compact = HUDLayoutPolicy.layout(rowCount: model.rows.count, expanded: false, longestCountdownLength: longest,
                                                 preferredPosition: transientPosition ?? state.hudPosition, displays: displays, legacyScrollerWidth: scrollerWidth) {
-            savePosition(HUDPosition(topRightX: compact.frame.maxX, topRightY: compact.frame.maxY, displayID: compact.displayID))
+            if let position = HUDLayoutPolicy.position(for: compact.frame, displays: displays) {
+                savePosition(position)
+            }
         }
         guard let layout = HUDLayoutPolicy.layout(rowCount: model.rows.count, expanded: model.expanded, longestCountdownLength: longest,
                                                   preferredPosition: transientPosition ?? state.hudPosition, displays: displays, legacyScrollerWidth: scrollerWidth) else {
@@ -209,7 +211,9 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         dragOrigin = nil
         frozenExpansion = nil
         if let origin, origin.origin != panel.frame.origin {
-            savePosition(position(for: panel.frame))
+            if let position = HUDLayoutPolicy.position(for: panel.frame, displays: Self.displays()) {
+                savePosition(position)
+            }
         }
         reveal.setHovering(panel.frame.contains(NSEvent.mouseLocation))
         synchronize()
@@ -230,12 +234,9 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
             nativeDragInProgress = true
             frozenExpansion = frozenExpansion ?? model.expanded
         }
-        savePosition(position(for: panel.frame))
-    }
-
-    private func position(for frame: NSRect) -> HUDPosition {
-        HUDPosition(topRightX: frame.maxX, topRightY: frame.maxY,
-                    displayID: HUDLayoutPolicy.displayID(for: frame, displays: Self.displays()))
+        if let position = HUDLayoutPolicy.position(for: panel.frame, displays: Self.displays()) {
+            savePosition(position)
+        }
     }
 
     private func savePosition(_ position: HUDPosition) {

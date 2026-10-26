@@ -34,11 +34,13 @@ countdown until the final minute. **Manage Hidden Events** opens the saved
 Meetings/Series rules with Unhide and confirmed Unhide All. Temporary hiding
 leaves the menu/audio eligibility intact and removes only that meeting's HUD row.
 
-Relevant meetings appear in one upper-right floating stack: bell for upcoming,
+Relevant meetings appear in one lower-right floating stack: bell for upcoming,
 play for ongoing, with a Reduce Motion-aware pulse during the final minute.
 Hover to reveal all titles, drag to move the entire stack, or scroll when rows
 exceed screen height. New/restored rows reveal titles for three elapsed seconds;
-reordering alone does not. Dragged position is saved locally, and disconnected
+reordering alone does not. The stack grows upward from its lower-right anchor.
+Dragged position is saved relative to the display's usable lower-right corner,
+so resizing the display preserves its edge offsets, and disconnected
 displays recover onto the primary usable area. Spaces/full-screen visibility is
 best-effort where macOS permits, never a reason to switch Spaces or take focus.
 No stack is shown without an eligible ongoing meeting or upcoming meeting inside

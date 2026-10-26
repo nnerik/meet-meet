@@ -50,7 +50,7 @@ func allRecordsSurviveReconstruction() throws {
     let state = AppState(storage: storage)
     let boundary = Date(timeIntervalSince1970: 10_000)
     let occurrence = OccurrenceKey(calendarID: "work", occurrenceID: "instance")
-    let position = HUDPosition(topRightX: -120, topRightY: 800, displayID: "external")
+    let position = HUDPosition(rightOffset: 120, bottomOffset: 80, displayID: "external")
     let rules = [HiddenEventRule(scope: .series, calendarID: "work", sourceID: "account", localItemID: "local",
                                 externalItemID: "external", title: "Lunch", calendarTitle: "Work")]
     let suppressions = [CountdownSuppression(occurrence: occurrence, phase: .upcoming, boundary: boundary)]
@@ -200,7 +200,7 @@ func optionalRecordsCanBeCleared() throws {
     let storage = MemoryStateStore()
     let state = AppState(storage: storage)
     try state.setPauseUntil(Date(timeIntervalSince1970: 42))
-    try state.setHUDPosition(HUDPosition(topRightX: 100, topRightY: 200))
+    try state.setHUDPosition(HUDPosition(rightOffset: 100, bottomOffset: 200))
     try state.setPauseUntil(nil)
     try state.setHUDPosition(nil)
     #expect(state.pauseUntil == nil)
@@ -209,7 +209,7 @@ func optionalRecordsCanBeCleared() throws {
     #expect(restored.pauseUntil == nil)
     #expect(restored.hudPosition == nil)
     #expect(restored.recoveryNotices.isEmpty)
-    #expect(throws: AppStateError.invalidPosition) { try state.setHUDPosition(HUDPosition(topRightX: .infinity, topRightY: 200)) }
+    #expect(throws: AppStateError.invalidPosition) { try state.setHUDPosition(HUDPosition(rightOffset: .infinity, bottomOffset: 200)) }
 }
 
 @Test @MainActor

@@ -147,18 +147,20 @@ func nativeHUDNativeMoveKeepsPositionAcrossCountdownRefresh() async throws {
     let writesBeforeMove = storage.writes
     // Replay the native window-manager movement independently of view callbacks.
     // This emits the same window-move notification as a background/window drag.
-    window.setFrameOrigin(NSPoint(x: initial.minX - 120, y: initial.minY - 80))
+    window.setFrameOrigin(NSPoint(x: initial.minX - 120, y: initial.minY + 80))
     let moved = window.frame
     for _ in 0..<3 {
         session.tick()
         try await Task.sleep(for: .milliseconds(10))
     }
-    let actualAnchor = NSPoint(x: window.frame.maxX, y: window.frame.maxY)
-    let movedAnchor = NSPoint(x: moved.maxX, y: moved.maxY)
+    let actualAnchor = NSPoint(x: window.frame.maxX, y: window.frame.minY)
+    let movedAnchor = NSPoint(x: moved.maxX, y: moved.minY)
     #expect(actualAnchor == movedAnchor)
     let saved = try #require(AppState(storage: storage).hudPosition)
-    #expect(saved.topRightX == Double(moved.maxX))
-    #expect(saved.topRightY == Double(moved.maxY))
+    let displays = NSScreen.screens.enumerated().map { HUDDisplay(id: "test-\($0.offset)", workArea: $0.element.visibleFrame) }
+    let expected = try #require(HUDLayoutPolicy.position(for: moved, displays: displays))
+    #expect(saved.rightOffset == expected.rightOffset)
+    #expect(saved.bottomOffset == expected.bottomOffset)
     #expect(storage.writes == writesBeforeMove + 1)
 }
 
@@ -169,7 +171,7 @@ func nativeHUDLayoutChangesDoNotOverwriteThePreferredPosition() async throws {
     let storage = NativeHUDMemoryStore()
     let state = AppState(storage: storage)
     try state.setSelectedCalendarIDs(["fixture"])
-    let preferred = HUDPosition(topRightX: Double(screen.visibleFrame.minX + 160), topRightY: Double(screen.visibleFrame.maxY - 100))
+    let preferred = HUDPosition(rightOffset: Double(screen.visibleFrame.width - 160), bottomOffset: 100)
     try state.setHUDPosition(preferred)
     let reader = NativeHUDCalendarFixture(count: 1)
     let session = CalendarSession(reader: reader, state: state)
@@ -183,11 +185,13 @@ func nativeHUDLayoutChangesDoNotOverwriteThePreferredPosition() async throws {
     let writesBeforeLayout = storage.writes
     controller.start()
     let originalHeight = window.frame.height
+    let originalBottom = window.frame.minY
     #expect(state.hudPosition == preferred)
     #expect(window.frame.minX == screen.visibleFrame.minX)
     await reader.addMeeting()
     await session.refresh()
     #expect(await waitForHUD { window.frame.height > originalHeight })
+    #expect(window.frame.minY == originalBottom)
     #expect(state.hudPosition == preferred)
     #expect(storage.writes == writesBeforeLayout)
 }

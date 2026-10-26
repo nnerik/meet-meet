@@ -1,14 +1,53 @@
 import Foundation
 
 public struct HUDPosition: Codable, Equatable, Sendable {
-    public let topRightX: Double
-    public let topRightY: Double
+    /// Distances inward from the display's usable lower-right corner, in points.
+    public let rightOffset: Double
+    public let bottomOffset: Double
     public let displayID: String?
+    let legacyTopRight: CGPoint?
 
-    public init(topRightX: Double, topRightY: Double, displayID: String? = nil) {
-        self.topRightX = topRightX
-        self.topRightY = topRightY
+    public init(rightOffset: Double, bottomOffset: Double, displayID: String? = nil) {
+        self.rightOffset = rightOffset
+        self.bottomOffset = bottomOffset
         self.displayID = displayID
+        legacyTopRight = nil
+    }
+
+    var isFinite: Bool {
+        if let legacyTopRight { return legacyTopRight.x.isFinite && legacyTopRight.y.isFinite }
+        return rightOffset.isFinite && bottomOffset.isFinite
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case rightOffset, bottomOffset, displayID, topRightX, topRightY
+    }
+
+    public init(from decoder: any Decoder) throws {
+        let values = try decoder.container(keyedBy: CodingKeys.self)
+        displayID = try values.decodeIfPresent(String.self, forKey: .displayID)
+        if values.contains(.rightOffset) {
+            rightOffset = try values.decode(Double.self, forKey: .rightOffset)
+            bottomOffset = try values.decode(Double.self, forKey: .bottomOffset)
+            legacyTopRight = nil
+        } else {
+            legacyTopRight = try CGPoint(x: values.decode(Double.self, forKey: .topRightX),
+                                         y: values.decode(Double.self, forKey: .topRightY))
+            rightOffset = 0
+            bottomOffset = 0
+        }
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var values = encoder.container(keyedBy: CodingKeys.self)
+        try values.encodeIfPresent(displayID, forKey: .displayID)
+        if let legacyTopRight {
+            try values.encode(legacyTopRight.x, forKey: .topRightX)
+            try values.encode(legacyTopRight.y, forKey: .topRightY)
+        } else {
+            try values.encode(rightOffset, forKey: .rightOffset)
+            try values.encode(bottomOffset, forKey: .bottomOffset)
+        }
     }
 }
 

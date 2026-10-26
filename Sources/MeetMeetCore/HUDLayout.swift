@@ -25,12 +25,12 @@ public enum HUDLayoutPolicy {
                               preferredPosition: HUDPosition?, displays: [HUDDisplay], legacyScrollerWidth: Double = 0) -> HUDLayout? {
         let available = displays.filter(validDisplay)
         guard rowCount > 0, let primary = available.first else { return nil }
-        let position = preferredPosition.flatMap { $0.topRightX.isFinite && $0.topRightY.isFinite ? $0 : nil }
+        let position = preferredPosition.flatMap { $0.isFinite ? $0 : nil }
         let display: HUDDisplay
         if let id = position?.displayID {
             display = available.first { $0.id == id } ?? primary
-        } else if let position {
-            display = available.first { contains(position, in: $0.workArea) } ?? primary
+        } else if let anchor = position?.legacyTopRight {
+            display = available.first { $0.workArea.contains(anchor) } ?? primary
         } else { display = primary }
 
         let area = display.workArea
@@ -46,10 +46,11 @@ public enum HUDLayoutPolicy {
         let documentWidth = max(1, width - scroller)
         let timerWidth = max(1, min(desiredTimerWidth, documentWidth - 63 - (expanded ? 72 : 0)))
         let titleWidth = expanded ? max(0, min(self.titleWidth, documentWidth - timerWidth - 75)) : 0
-        let right = position?.topRightX ?? area.maxX - marginX
-        let top = position?.topRightY ?? area.maxY - marginY
+        let right = position.map { $0.legacyTopRight?.x ?? area.maxX - $0.rightOffset } ?? area.maxX - marginX
+        // Old records have no HUD height. Migrate using a single compact row.
+        let bottom = position.map { $0.legacyTopRight.map { $0.y - rowHeight } ?? area.minY + $0.bottomOffset } ?? area.minY + marginY
         let x = min(max(right - width, area.minX), area.maxX - width)
-        let y = min(max(top - height, area.minY), area.maxY - height)
+        let y = min(max(bottom, area.minY), area.maxY - height)
         return HUDLayout(frame: CGRect(x: x, y: y, width: width, height: height),
                          documentSize: CGSize(width: documentWidth, height: documentHeight), timerWidth: timerWidth,
                          titleWidth: titleWidth, needsScrolling: scrolling, displayID: display.id)
@@ -58,12 +59,20 @@ public enum HUDLayoutPolicy {
     public static func needsPositionRecovery(_ position: HUDPosition?, displays: [HUDDisplay]) -> Bool {
         guard let position else { return false }
         let available = displays.filter(validDisplay)
-        guard position.topRightX.isFinite, position.topRightY.isFinite else { return true }
+        guard position.isFinite, position.legacyTopRight == nil else { return true }
         if let id = position.displayID {
             guard let display = available.first(where: { $0.id == id }) else { return true }
             return !contains(position, in: display.workArea)
         }
-        return !available.contains { contains(position, in: $0.workArea) }
+        guard let primary = available.first else { return true }
+        return !contains(position, in: primary.workArea)
+    }
+
+    public static func position(for frame: CGRect, displays: [HUDDisplay]) -> HUDPosition? {
+        guard let id = displayID(for: frame, displays: displays),
+              let display = displays.first(where: { $0.id == id }) else { return nil }
+        return HUDPosition(rightOffset: display.workArea.maxX - frame.maxX,
+                           bottomOffset: frame.minY - display.workArea.minY, displayID: id)
     }
 
     public static func displayID(for frame: CGRect, displays: [HUDDisplay]) -> String? {
@@ -85,7 +94,7 @@ public enum HUDLayoutPolicy {
     }
 
     private static func contains(_ position: HUDPosition, in frame: CGRect) -> Bool {
-        position.topRightX >= frame.minX && position.topRightX <= frame.maxX &&
-        position.topRightY >= frame.minY && position.topRightY <= frame.maxY
+        position.rightOffset >= 0 && position.rightOffset <= frame.width &&
+        position.bottomOffset >= 0 && position.bottomOffset <= frame.height
     }
 }
