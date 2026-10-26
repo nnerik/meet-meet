@@ -3,6 +3,12 @@ name: Release
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version to validate without publishing
+        required: true
+        default: '0.1.0'
 
 permissions:
   contents: read
@@ -27,8 +33,22 @@ jobs:
       - name: Validate tag and package tested release
         env:
           RELEASE_TAG: ${{ github.ref_name }}
-        run: bash scripts/package-release.sh "${RELEASE_TAG#v}"
+          VALIDATION_VERSION: ${{ inputs.version }}
+        run: bash scripts/package-release.sh "${VALIDATION_VERSION:-${RELEASE_TAG#v}}"
+      - name: Report native test failures
+        if: failure()
+        run: |
+          find build/DerivedData/Logs/Test -name '*.xcresult' -maxdepth 1 \
+            -exec xcrun xcresulttool get test-results summary --path '{}' \;
+      - name: Retain failed native test results
+        if: failure()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: native-test-results
+          path: build/DerivedData/Logs/Test/*.xcresult
+          retention-days: 7
       - name: Publish release
+        if: github.ref_type == 'tag' && github.event_name == 'push'
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}

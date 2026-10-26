@@ -12,7 +12,7 @@ root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
 [[ -z "$(git status --porcelain)" ]] || fail "Commit or otherwise resolve working-tree changes before packaging."
 [[ -f "releases/$version.md" ]] || fail "Add releases/$version.md before packaging."
-if [[ -n "${GITHUB_REF_NAME:-}" ]]; then
+if [[ "${GITHUB_REF_TYPE:-}" == tag ]]; then
     [[ "$GITHUB_REF_NAME" == "v$version" ]] || fail "Version does not match the release tag."
 fi
 

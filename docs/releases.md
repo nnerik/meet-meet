@@ -71,6 +71,10 @@ revision, downloadable assets and notes under **Releases**. A private repository
 releases remain private until its visibility changes; publication does not itself
 change repository visibility. GitHub automatically supplies tagged source archives.
 
+The workflow also supports **Run workflow** with a version input for validation
+without publishing. Failed native runs print their test summary and retain the
+Xcode test results for seven days so CI-only assertions can be investigated.
+
 If CI is unavailable, package locally from the exact clean tagged commit and use
 `gh release create --verify-tag --draft`, upload the three artifacts, then publish
 only after inspecting them. Never publish build output from a different revision.
