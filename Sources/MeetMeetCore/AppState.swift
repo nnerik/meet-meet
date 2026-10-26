@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 public enum AppStateRecord: String, CaseIterable, Sendable {
-    case preferences, selectedCalendars, onboarding, pause, hudPosition, hiddenEvents, countdownSuppressions, handledCues
+    case preferences, selectedCalendars, onboarding, pause, hudPosition, hiddenEvents, countdownSuppressions, handledCues, dismissedSplashCues
 
     public var storageKey: String { "meetmeet.\(rawValue)" }
 }
@@ -39,6 +39,7 @@ public final class AppState {
     public private(set) var hiddenEvents: [HiddenEventRule]
     public private(set) var countdownSuppressions: [CountdownSuppression]
     public private(set) var handledCues: [HandledCue]
+    public private(set) var dismissedSplashCues: Set<OccurrenceKey>
     public private(set) var recoveryNotices: [StateRecoveryNotice]
 
     private let storage: any LocalStateStoring
@@ -73,6 +74,7 @@ public final class AppState {
         hiddenEvents = load(.hiddenEvents, fallback: [])
         countdownSuppressions = load(.countdownSuppressions, fallback: [])
         handledCues = load(.handledCues, fallback: [])
+        dismissedSplashCues = load(.dismissedSplashCues, fallback: [])
         recoveryNotices = notices
         protectedRecords = protected
     }
@@ -127,6 +129,11 @@ public final class AppState {
     public func setHandledCues(_ cues: [HandledCue]) throws {
         try save(cues, record: .handledCues)
         handledCues = cues
+    }
+
+    public func setDismissedSplashCues(_ occurrences: Set<OccurrenceKey>) throws {
+        try save(occurrences, record: .dismissedSplashCues)
+        dismissedSplashCues = occurrences
     }
 
     private func save<Value: Encodable>(_ value: Value, record: AppStateRecord) throws {

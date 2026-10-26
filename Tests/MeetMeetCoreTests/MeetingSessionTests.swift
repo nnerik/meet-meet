@@ -105,6 +105,50 @@ private func liveMeeting(_ id: String = "one", start: TimeInterval, end: TimeInt
     #expect(player.sounds == ["meet-meet", "wrap-wrap"])
 }
 
+@Test @MainActor func liveSplashRespectsPauseAndHiddenMeetingsButNotTemporaryHUDSuppression() async throws {
+    let state = try liveState()
+    try state.updatePreferences { $0.hudLeadMinutes = 0; $0.splashLeadMinutes = 2 }
+    let event = liveMeeting(start: 120, end: 600)
+    let live = MeetingSession(reader: LiveCalendarReader([event]), state: state, player: LiveSoundPlayer(),
+                              clock: LiveClock(), calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    #expect(live.presentation.hudRows.isEmpty)
+    #expect(live.splashCues.meetings == [event])
+    try live.calendarSession.reminders.suppressCountdown(event, at: liveNow)
+    live.tick()
+    #expect(live.splashCues.meetings == [event])
+    try live.calendarSession.pauseForToday()
+    live.tick()
+    #expect(live.splashCues.meetings.isEmpty)
+    try live.calendarSession.resume()
+    live.tick()
+    #expect(live.splashCues.meetings == [event])
+    try live.calendarSession.reminders.hide(event, scope: .occurrence, calendarTitle: "Work", in: [event], at: liveNow)
+    live.tick()
+    #expect(live.splashCues.meetings.isEmpty)
+}
+
+@Test @MainActor func liveSplashCatchesUpAfterWakeButNeverAfterMeetingStart() async throws {
+    let clock = LiveClock()
+    let event = liveMeeting(start: 120, end: 600)
+    let live = MeetingSession(reader: LiveCalendarReader([event]), state: try liveState(), player: LiveSoundPlayer(),
+                              clock: clock, calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    #expect(live.splashCues.meetings.isEmpty)
+    live.setSleeping(true)
+    clock.set(liveNow.addingTimeInterval(90))
+    live.setSleeping(false)
+    await live.refresh()
+    #expect(live.splashCues.meetings == [event])
+    clock.set(event.start)
+    await live.refresh()
+    #expect(live.splashCues.meetings.isEmpty)
+}
+
 @Test @MainActor func liveSessionResumeNeverReplaysCueMissedBetweenTimerTicks() async throws {
     let clock = LiveClock()
     let player = LiveSoundPlayer()

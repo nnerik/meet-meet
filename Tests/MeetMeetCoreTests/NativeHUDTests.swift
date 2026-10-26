@@ -343,4 +343,68 @@ func nativeHUDExposesMeetingRowsInTheApplicationAccessibilityTree() async throws
     #expect(collapsedLabel == "Native HUD fixture 1")
     #expect(!window.canBecomeKey)
 }
+@Test @MainActor
+func nativeSplashIsCenteredPassiveThemeAwareAndDismissable() async throws {
+    let application = NSApplication.shared
+    let screen = try #require(NSScreen.screens.first)
+    let state = AppState(storage: NativeHUDMemoryStore())
+    try state.setSelectedCalendarIDs(["fixture"])
+    let cues = SplashCueSession(state: state)
+    let before = Set(application.windows.map { ObjectIdentifier($0) })
+    let previousKey = application.keyWindow
+    let frontmostPID = NSWorkspace.shared.frontmostApplication?.processIdentifier
+    let controller = SplashHUDController(session: cues)
+    let window = try #require(application.windows.first {
+        !before.contains(ObjectIdentifier($0)) && $0.identifier?.rawValue == "meetmeet.splashHUD"
+    })
+    defer { controller.stop(); window.close() }
+    controller.start()
+    #expect(!window.isVisible)
+    let now = Date()
+    let meeting = MeetingOccurrence(id: "splash", calendarID: "fixture", title: "Splash fixture",
+                                    start: now.addingTimeInterval(30), end: now.addingTimeInterval(600))
+    cues.update(occurrences: [meeting], isActive: true, at: now)
+    #expect(await waitForHUD { window.isVisible })
+    #expect(application.keyWindow === previousKey)
+    #expect(NSWorkspace.shared.frontmostApplication?.processIdentifier == frontmostPID)
+    #expect(!window.canBecomeMain)
+    #expect(window.styleMask.contains(.nonactivatingPanel))
+    #expect(window.frame.midX == screen.visibleFrame.midX)
+    #expect(window.frame.midY == screen.visibleFrame.midY)
+    #expect(screen.visibleFrame.contains(window.frame))
+    #expect(window.frame.width / window.frame.height == 1.5)
+    let content = try #require(window.contentView)
+    let image = try #require(content.subviews.compactMap { $0 as? NSImageView }.first)
+    #expect(content.hitTest(NSPoint(x: content.bounds.midX, y: content.bounds.midY)) === content)
+    window.appearance = NSAppearance(named: .aqua)
+    #expect(await waitForHUD { image.identifier?.rawValue == "billboard-light-mode" })
+    #expect(image.image != nil)
+    window.appearance = NSAppearance(named: .darkAqua)
+    #expect(await waitForHUD { image.identifier?.rawValue == "billboard-dark-mode" })
+    #expect(image.image != nil)
+    let close = try #require(content.subviews.compactMap { $0 as? NSButton }.first)
+    close.performClick(nil)
+    #expect(!window.isVisible)
+    cues.update(occurrences: [meeting], isActive: true, at: now)
+    #expect(cues.meetings.isEmpty)
+
+    let another = MeetingOccurrence(id: "another-splash", calendarID: "fixture", title: "Another splash",
+                                    start: now.addingTimeInterval(30), end: now.addingTimeInterval(600))
+    cues.update(occurrences: [another], isActive: true, at: now)
+    #expect(await waitForHUD { window.isVisible })
+    // Escape is handled by the panel after the user gives it keyboard focus.
+    let escape = try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: [], timestamp: 0,
+                                              windowNumber: window.windowNumber, context: nil, characters: "\u{1b}",
+                                              charactersIgnoringModifiers: "\u{1b}", isARepeat: false, keyCode: 53))
+    window.keyDown(with: escape)
+    #expect(!window.isVisible)
+    #expect(state.dismissedSplashCues == [meeting.key, another.key])
+
+    let final = MeetingOccurrence(id: "final-splash", calendarID: "fixture", title: "Final splash",
+                                  start: now.addingTimeInterval(30), end: now.addingTimeInterval(600))
+    cues.update(occurrences: [final], isActive: true, at: now)
+    #expect(await waitForHUD { window.isVisible })
+    cues.update(occurrences: [final], isActive: true, at: final.start)
+    #expect(await waitForHUD { !window.isVisible })
+}
 #endif

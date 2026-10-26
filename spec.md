@@ -95,13 +95,22 @@ Use a calendar icon followed by time and summary when relevant:
 - Recover onto the primary display if its display disappears. Re-evaluate usable bounds on display configuration changes.
 - Respect system light/dark appearance and accessibility settings, using semantic colors/materials. Provide VoiceOver meeting identity, upcoming/ongoing state and remaining time even while titles are visually collapsed; avoid continual intrusive announcements.
 
+### Final splash cue
+
+- Enabled by default with a one-minute lead time, configurable from 1–60 minutes in General settings, independently of the countdown HUD and audio.
+- Show an image-only, dismissable splash centered in the primary display's usable area. Use the bundled `billboard-light-mode.png` or `billboard-dark-mode.png` for the current system appearance, updating if the theme changes while visible. Preserve aspect ratio and fit within the display.
+- Appear without activating the app, taking keyboard focus or switching Spaces. Provide a close button; clicking the artwork may focus the nonactivating panel so Escape dismisses it without keyboard-monitoring permissions.
+- Show for eligible upcoming meetings within the configured interval, including launch/wake/resume inside that interval. Hide at meeting start, when disabled, on pause/access loss, or when the relevant meeting is hidden/removed. Never show an ongoing meeting's start cue.
+- Coincident/overlapping cue intervals share a single splash. Dismiss all currently represented occurrences together and persist manual dismissals across restart; a later distinct occurrence can show a new splash. Failed dismissal persistence must not prevent live dismissal and must be reported.
+- Respect selected calendars, permanent hiding and Pause for Today. Temporary countdown suppression does not suppress the splash. Invalid or ambiguous occurrences cannot trigger it; unreadable reminder/dismissal records disable automatic splash presentation rather than risking unwanted repeats.
+
 ## 7. Permanent hiding and temporary suppression
 
 ### Hide meeting / series
 
 - Hiding expresses reminder relevance (e.g. daily Lunch or focus time), not attendance. Declining a meeting remains an action in the source calendar.
 - `Hide this meeting` suppresses one occurrence. `Hide this series` suppresses identifiable occurrences and exceptions of that series within its calendar.
-- Both immediately remove meeting entries/HUD rows and suppress sounds without writing to the calendar. Rules persist across restarts and calendar deselection/reselection.
+- Both immediately remove meeting entries/HUD rows and suppress sounds and splash cues without writing to the calendar. Rules persist across restarts and calendar deselection/reselection.
 - Follow edits/rescheduling only where identity is confidently preserved. Never match by title alone. On ambiguous identity, fail visible rather than hide an unrelated meeting.
 - Treat deleted/recreated events, cross-calendar moves and this-and-future series splits as new unless identity/relationship is reliably established. Do not promise identifiers survive provider rewrites or full sync.
 - Manage Hidden Events has separate Meetings and Series lists with saved title, calendar and occurrence date where applicable. Offer Unhide and confirmed Unhide All.
@@ -145,6 +154,7 @@ Use a calendar icon followed by time and summary when relevant:
 | --- | --- | --- |
 | Launch at login | Off | Actual service state with enable/disable action |
 | HUD lead time | 30 minutes | 0–120 minutes; zero ongoing-only |
+| Final splash cue | On; 1 minute before start | Enable/disable; lead time 1–60 minutes |
 | Seconds threshold | 5 minutes | 0–60 minutes; zero disables seconds |
 | Menu title limit | 24 characters | 8–80 characters |
 | Start audio | Off; meet-meet; suggested offset 1 minute | Bundled or system sound, enable/disable, offset 0–60 minutes |
@@ -152,11 +162,11 @@ Use a calendar icon followed by time and summary when relevant:
 | Audio volume | Normal playback level | App-local volume, never system volume |
 | Calendar selection | Explicit onboarding choice | Available EventKit calendars; new calendars unselected |
 
-Settings sections: General, Calendars, Audio and Hidden Events. General includes menu-title length as well as countdown/login controls. Validate input and apply changes immediately without retroactive audio.
+Settings sections: General, Calendars, Audio and Hidden Events. General includes menu-title length as well as countdown, splash and login controls. Validate input and apply changes immediately without retroactive audio.
 
 Minute/count settings support direct whole-number entry as well as optional steppers. Commit typed values on Return or focus loss; show inline range errors without saving invalid input. The 30-minute lead-time default applies to fresh/missing preferences, not as an override of an existing saved choice.
 
-Persist locally: preferences/calendar choices, onboarding completion, pause expiry, stack location, occurrence/series rules, phase-specific temporary suppression, and cue-handling history. Use app-local versioned records (UserDefaults/AppStorage or equivalent simple local storage); no server. Retain only metadata needed for behavior/recovery; no event-content logs or telemetry. Identifier evidence must be scoped to calendar/source, not a title-based global key.
+Persist locally: preferences/calendar choices, onboarding completion, pause expiry, stack location, occurrence/series rules, phase-specific temporary suppression, cue-handling history and manually dismissed splash occurrences. Use app-local versioned records (UserDefaults/AppStorage or equivalent simple local storage); no server. Retain only metadata needed for behavior/recovery; no event-content logs or telemetry. Identifier evidence must be scoped to calendar/source, not a title-based global key.
 
 ## 11. Acceptance and implementation handoff
 

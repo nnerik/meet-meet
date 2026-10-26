@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var session: CalendarSession { live.calendarSession }
     private var audioCues: AudioCueSession { live.audioCues }
     private lazy var hud = CountdownHUDController(state: state, session: session)
+    private lazy var splash = SplashHUDController(session: live.splashCues)
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
     private var timer: Timer?
@@ -47,6 +48,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem = item
         live.start()
         hud.start()
+        splash.start()
         installObservers()
         let timer = Timer(timeInterval: 1, target: self, selector: #selector(tick), userInfo: nil, repeats: true)
         timer.tolerance = 0.2
@@ -267,7 +269,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             window.title = "Meet Meet Settings"
             window.identifier = NSUserInterfaceItemIdentifier("meetmeet.settings")
             window.isReleasedWhenClosed = false
-            window.contentView = NSHostingView(rootView: SettingsView(state: state, session: session, hud: hud, audioCues: audioCues, setup: setup, login: login, navigation: navigation))
+            window.contentView = NSHostingView(rootView: SettingsView(state: state, session: session, hud: hud, splashCues: live.splashCues, audioCues: audioCues, setup: setup, login: login, navigation: navigation))
             window.center()
             settingsWindow = window
         }
@@ -282,6 +284,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         observers.removeAll()
         titleObservationGeneration += 1
         hud.stop()
+        splash.stop()
         live.stop()
     }
 
@@ -300,6 +303,7 @@ private struct SettingsView: View {
     let state: AppState
     let session: CalendarSession
     let hud: CountdownHUDController
+    let splashCues: SplashCueSession
     let audioCues: AudioCueSession
     let setup: OnboardingSession
     let login: LoginLaunchSession
@@ -330,6 +334,9 @@ private struct SettingsView: View {
             if let error = hud.positionError {
                 Label(error, systemImage: "exclamationmark.triangle").font(.callout).padding()
             }
+            if let error = splashCues.errorMessage {
+                Label(error, systemImage: "exclamationmark.triangle").font(.callout).padding()
+            }
             TabView(selection: $navigation.tab) {
                 Tab("General", systemImage: "gearshape", value: SettingsTab.general) { general }
                 Tab("Calendars", systemImage: "calendar", value: SettingsTab.calendars) { CalendarSettingsView(state: state, session: session) }
@@ -350,6 +357,13 @@ private struct SettingsView: View {
                 Text("Zero shows ongoing countdowns only.").font(.caption).foregroundStyle(.secondary)
                 IntegerSettingField("Show seconds below", value: preference(\.secondsThresholdMinutes), range: 0...60, unit: "minutes")
                 Text("Zero disables seconds.").font(.caption).foregroundStyle(.secondary)
+            }
+            Section("Final splash cue") {
+                Toggle("Show splash before meetings", isOn: preference(\.splashCueEnabled))
+                IntegerSettingField("Before start", value: preference(\.splashLeadMinutes), range: 1...60, unit: "minutes")
+                    .disabled(!state.preferences.splashCueEnabled)
+                Text("Appears on the primary display until dismissed or the meeting starts. Close it with ×, or click the image then press Escape. Does not interrupt typing.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Menu bar") {
                 IntegerSettingField("Title length", value: preference(\.menuTitleLimit), range: 8...80, unit: "characters")

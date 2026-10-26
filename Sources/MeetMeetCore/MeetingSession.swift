@@ -1,12 +1,13 @@
 import Foundation
 import Observation
 
-/// Shared live pipeline. Menu, HUD and audio use the same reconciled calendar
+/// Shared live pipeline. Menu, HUDs and audio use the same reconciled calendar
 /// values and timestamp; native callers supply only lifecycle events and adapters.
 @MainActor
 public final class MeetingSession {
     public let calendarSession: CalendarSession
     public let audioCues: AudioCueSession
+    public let splashCues: SplashCueSession
     private let state: AppState
     private var running = false
     private var observationGeneration = 0
@@ -24,6 +25,7 @@ public final class MeetingSession {
         self.state = state
         calendarSession = CalendarSession(reader: reader, state: state, clock: clock, calendar: calendar, scheduler: scheduler)
         audioCues = AudioCueSession(state: state, player: player, cueHandled: cueHandled)
+        splashCues = SplashCueSession(state: state)
     }
 
     public func start() {
@@ -37,11 +39,13 @@ public final class MeetingSession {
         running = false
         observationGeneration += 1
         audioCues.reset()
+        splashCues.reset()
         calendarSession.stop()
     }
 
     public func refresh() async {
         audioCues.reset()
+        splashCues.reset()
         await calendarSession.refresh()
         if running { renewObservation() }
     }
@@ -52,23 +56,28 @@ public final class MeetingSession {
         calendarSession.tick()
         advancingTime = false
         if observationPending { renewObservation() }
-        else { updateAudio() }
+        else { updateCues() }
     }
 
     public func setSleeping(_ sleeping: Bool) {
         self.sleeping = sleeping
         audioCues.reset()
+        splashCues.reset()
         if !sleeping { calendarSession.invalidate() }
     }
 
     public func invalidate() {
         audioCues.reset()
+        splashCues.reset()
         calendarSession.invalidate()
     }
 
-    private func updateAudio() {
+    private func updateCues() {
         guard running, !sleeping, !observationPending else { return }
         audioCues.update(occurrences: calendarSession.reminderOccurrences,
+                         isActive: calendarSession.status == .ready && !calendarSession.isPaused,
+                          at: calendarSession.now)
+        splashCues.update(occurrences: calendarSession.reminderOccurrences,
                          isActive: calendarSession.status == .ready && !calendarSession.isPaused,
                          at: calendarSession.now)
     }
@@ -106,6 +115,6 @@ public final class MeetingSession {
                 self.tick()
             }
         }
-        updateAudio()
+        updateCues()
     }
 }

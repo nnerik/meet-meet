@@ -22,6 +22,8 @@ func freshStateHasApprovedDefaultsWithoutWriting() {
     #expect(state.preferences.startCue.offsetMinutes == 1)
     #expect(state.preferences.endCue.offsetMinutes == 2)
     #expect(state.preferences.audioVolume == 1)
+    #expect(state.preferences.splashCueEnabled)
+    #expect(state.preferences.splashLeadMinutes == 1)
     #expect(state.selectedCalendarIDs.isEmpty)
     #expect(!state.onboardingCompleted)
     #expect(state.pauseUntil == nil)
@@ -29,6 +31,7 @@ func freshStateHasApprovedDefaultsWithoutWriting() {
     #expect(state.hiddenEvents.isEmpty)
     #expect(state.countdownSuppressions.isEmpty)
     #expect(state.handledCues.isEmpty)
+    #expect(state.dismissedSplashCues.isEmpty)
     #expect(state.recoveryNotices.isEmpty)
     #expect(storage.writeCount == 0)
 }
@@ -64,6 +67,8 @@ func allRecordsSurviveReconstruction() throws {
         $0.startCue.offsetMinutes = 0
         $0.endCue.offsetMinutes = 60
         $0.audioVolume = 0.4
+        $0.splashCueEnabled = false
+        $0.splashLeadMinutes = 10
     }
     try state.setSelectedCalendarIDs(["work", "personal"])
     try state.setOnboardingCompleted(true)
@@ -72,6 +77,7 @@ func allRecordsSurviveReconstruction() throws {
     try state.setHiddenEvents(rules)
     try state.setCountdownSuppressions(suppressions)
     try state.setHandledCues(cues)
+    try state.setDismissedSplashCues([occurrence])
 
     let restored = AppState(storage: storage)
     #expect(restored.preferences == state.preferences)
@@ -82,6 +88,7 @@ func allRecordsSurviveReconstruction() throws {
     #expect(restored.hiddenEvents == rules)
     #expect(restored.countdownSuppressions == suppressions)
     #expect(restored.handledCues == cues)
+    #expect(restored.dismissedSplashCues == [occurrence])
     #expect(restored.recoveryNotices.isEmpty)
     #expect(storage.records.count == AppStateRecord.allCases.count)
 }
@@ -96,6 +103,7 @@ func invalidPreferenceEditsDoNotMutateStateOrStorage() throws {
         { $0.hudLeadMinutes = -1 }, { $0.hudLeadMinutes = 121 },
         { $0.secondsThresholdMinutes = -1 }, { $0.secondsThresholdMinutes = 61 },
         { $0.menuTitleLimit = 7 }, { $0.menuTitleLimit = 81 },
+        { $0.splashLeadMinutes = 0 }, { $0.splashLeadMinutes = 61 },
         { $0.startCue.offsetMinutes = -1 }, { $0.startCue.offsetMinutes = 61 },
         { $0.endCue.offsetMinutes = -1 }, { $0.endCue.offsetMinutes = 61 },
         { $0.audioVolume = -0.1 }, { $0.audioVolume = 1.1 },

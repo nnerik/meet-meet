@@ -46,6 +46,16 @@ best-effort where macOS permits, never a reason to switch Spaces or take focus.
 No stack is shown without an eligible ongoing meeting or upcoming meeting inside
 the configured lead time.
 
+**Settings → General → Final splash cue** controls an image-only reminder in the
+center of the primary display, enabled by default one minute before start
+(configurable from 1–60 minutes). It uses the bundled light/dark artwork to match
+the system theme. Close it with **×**, or click the image then press **Escape**;
+it does not take keyboard focus when it appears. It disappears when the meeting
+starts. Manual dismissals survive restart, and simultaneous reminders share one
+splash. Launching or waking inside the lead interval shows a still-upcoming
+meeting's cue. Pause and hidden meetings suppress it; temporary countdown hiding
+and the regular HUD's lead time do not affect it.
+
 **Settings → Audio** offers independent start/end cues (both off by default),
 bundled or system-sound selection, Preview and app-local volume. The bundled
 `media/meet-meet.mp3` and `media/wrap-wrap.mp3` are the start/end defaults for new
