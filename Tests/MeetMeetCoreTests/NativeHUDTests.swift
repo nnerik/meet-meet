@@ -369,10 +369,13 @@ func nativeSplashIsCenteredPassiveThemeAwareAndDismissable() async throws {
     #expect(NSWorkspace.shared.frontmostApplication?.processIdentifier == frontmostPID)
     #expect(!window.canBecomeMain)
     #expect(window.styleMask.contains(.nonactivatingPanel))
-    #expect(window.frame.midX == screen.visibleFrame.midX)
-    #expect(window.frame.midY == screen.visibleFrame.midY)
+    // AppKit rounds fractional window origins/sizes to display pixels. On CI's
+    // 1024-point display, the 60% size produces a half-point center difference.
+    let pixel = 1 / screen.backingScaleFactor
+    #expect(abs(window.frame.midX - screen.visibleFrame.midX) <= pixel)
+    #expect(abs(window.frame.midY - screen.visibleFrame.midY) <= pixel)
     #expect(screen.visibleFrame.contains(window.frame))
-    #expect(window.frame.width / window.frame.height == 1.5)
+    #expect(abs(window.frame.width - window.frame.height * 1.5) <= 2.5 * pixel)
     let content = try #require(window.contentView)
     let image = try #require(content.subviews.compactMap { $0 as? NSImageView }.first)
     #expect(content.hitTest(NSPoint(x: content.bounds.midX, y: content.bounds.midY)) === content)
