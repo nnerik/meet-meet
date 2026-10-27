@@ -160,6 +160,9 @@ publishing, packaging checks and distribution limitations.
   movement; that layout-generated frame becomes accounted for, not a new dragged
   anchor when a later view callback ends. Native-only movement releases when the
   pointer is up; stopping explicitly cancels the interaction.
+  Native moves arriving with unreconciled display geometry do not establish a
+  new anchor; the next update recovers from the known preference first. Delayed
+  notifications for an already applied/observed frame are ignored as well.
   Pure `HUDLayoutPolicy` tests placement/clamping/overflow without windows;
   `HUDRevealState` uses elapsed monotonic time for arrival-title timing.
   Native window-move notifications save the authoritative anchor; controller
@@ -228,6 +231,13 @@ and physical display unplugging were **not performed** in this agent run; no
 hardware-disconnection or physical-input control was available through the test
 harness. Those checks still need owner validation and are not implied by the
 synthetic results.
+
+Review follow-up regressions also cover relocation notifications arriving before
+display reconciliation, repeated or delayed notifications, view completion before
+reconciliation, temporary display unavailability, and resizing without changing
+the display ID. Both normal and protected storage preserve the compact anchor;
+subsequent genuine movement still updates it. Physical notification ordering
+remains unverified.
 
 State uses app-local UserDefaults data records. Loading does not rewrite saved
 data: malformed preference fields fall back individually, unreadable records

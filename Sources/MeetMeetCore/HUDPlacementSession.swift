@@ -26,6 +26,7 @@ public final class HUDPlacementSession {
     private var movement: Movement?
     private var expanded = false
     private var lastDisplays: [HUDDisplay]?
+    private var lastFrame: CGRect?
 
     public init(state: AppState) { self.state = state }
 
@@ -45,12 +46,16 @@ public final class HUDPlacementSession {
         if movement != nil && !displaysChanged { return .unchanged(expanded: expanded) }
         guard let layout = layout(rowCount: rowCount, expanded: expanded, longestCountdownLength: longestCountdownLength,
                                   displays: displays, legacyScrollerWidth: legacyScrollerWidth) else {
-            resetMovement()
+            // No frame has been reconciled. Keep the last known geometry so a
+            // relocation arriving as displays return cannot establish an anchor.
+            movement = nil
+            expanded = false
             return .hidden
         }
         // Display recovery is not a user move. A later view-drag completion
         // must not persist the temporarily expanded/clamped recovery frame.
         lastDisplays = displays
+        lastFrame = layout.frame
         movement?.accountedFrame = layout.frame
         return .layout(layout, expanded: expanded)
     }
@@ -78,6 +83,7 @@ public final class HUDPlacementSession {
         movement = nil
         expanded = false
         lastDisplays = nil
+        lastFrame = nil
     }
 
     private func layout(rowCount: Int, expanded: Bool, longestCountdownLength: Int,
@@ -95,8 +101,16 @@ public final class HUDPlacementSession {
     }
 
     private func saveFrame(_ frame: CGRect, displays: [HUDDisplay]) {
+        // A move can arrive before display reconciliation and describe macOS
+        // relocating/clamping the expanded window, not a new preferred anchor.
+        // Keep the known anchor until update has reconciled the new geometry.
+        guard lastDisplays == nil || lastDisplays == displays else { return }
+        // Delayed notifications for an already applied/observed frame are not
+        // new movement, even when that frame was temporarily clamped by layout.
+        guard frame != lastFrame else { return }
         guard let position = HUDLayoutPolicy.position(for: frame, displays: displays) else { return }
         save(position)
+        lastFrame = frame
     }
 
     private func save(_ position: HUDPosition) {

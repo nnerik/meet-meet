@@ -340,6 +340,80 @@ func placementHidingPreservesPendingMovementWhileStoppingCancelsIt(hide: Bool) t
     #expect(storage.writes == 0)
 }
 
+private enum RelocationNotificationOrder: CaseIterable, Equatable {
+    case moveBeforeUpdate, repeatedMovesBeforeUpdate, moveAfterUpdate, completionBeforeUpdate, moveAndCompletionBeforeUpdate
+    case moveAfterUnavailableDisplays
+}
+
+@Test(arguments: [false, true], RelocationNotificationOrder.allCases) @MainActor
+private func placementRelocationNotificationBeforeDisplayUpdatePreservesCompactAnchor(protectedRecord: Bool, order: RelocationNotificationOrder) throws {
+    let storage = HUDPlacementStore()
+    let protected = Data(#"{"version":99,"value":{"savedBy":"a newer version"}}"#.utf8)
+    if protectedRecord { storage.records[AppStateRecord.hudPosition.storageKey] = protected }
+    let state = AppState(storage: storage)
+    let placement = HUDPlacementSession(state: state)
+    let displays = [primaryHUDDisplay, secondaryHUDDisplay]
+    placement.recordMove(to: CGRect(x: -1_245, y: 300, width: 145, height: 116), displays: displays)
+    let expanded = try placedHUD(placement, expanded: true, displays: displays)
+    let hasCompletion = order == .completionBeforeUpdate || order == .moveAndCompletionBeforeUpdate
+    if hasCompletion { placement.beginMove(at: expanded.frame, source: .view) }
+
+    // macOS relocates the expanded window before the display-change update.
+    // Its clamped right edge is not the preferred compact right edge.
+    let relocated = CGRect(x: 0, y: 200, width: 347, height: 116)
+    if order == .moveAfterUnavailableDisplays {
+        #expect(placement.update(rowCount: 2, expanded: true, longestCountdownLength: 4, displays: []) == .hidden)
+    }
+    if order == .moveAfterUpdate { _ = try placedHUD(placement, expanded: true) }
+    if order != .completionBeforeUpdate { placement.recordMove(to: relocated, displays: [primaryHUDDisplay]) }
+    if order == .repeatedMovesBeforeUpdate { placement.recordMove(to: relocated, displays: [primaryHUDDisplay]) }
+    if hasCompletion { placement.endMove(at: relocated, displays: [primaryHUDDisplay]) }
+    let compact = try placedHUD(placement)
+    #expect(compact.frame.maxX == 340)
+    #expect(compact.frame.minY == 200)
+    if protectedRecord {
+        #expect(state.hudPosition == nil)
+        #expect(storage.records[AppStateRecord.hudPosition.storageKey] == protected)
+        #expect(placement.positionError != nil)
+    } else {
+        #expect(state.hudPosition == HUDPosition(rightOffset: 1_100, bottomOffset: 200, displayID: "primary"))
+    }
+    #expect(storage.writes == (protectedRecord ? 0 : 2))
+
+    // Once geometry is reconciled, genuine movement must still be accepted,
+    // including a user returning to the previously rendered position.
+    let userMoved = compact.frame.offsetBy(dx: 80, dy: 20)
+    placement.recordMove(to: userMoved, displays: [primaryHUDDisplay], isPointerDown: true)
+    #expect(try placedHUD(placement).frame == userMoved)
+    placement.recordMove(to: compact.frame, displays: [primaryHUDDisplay])
+    #expect(try placedHUD(placement).frame == compact.frame)
+    let restarted = HUDPlacementSession(state: AppState(storage: storage))
+    #expect(try placedHUD(restarted).frame.maxX == (protectedRecord ? 1_416 : 340))
+    #expect(storage.writes == (protectedRecord ? 0 : 4))
+}
+
+@Test(arguments: [false, true]) @MainActor
+func placementRelocationBeforeSameDisplayResizeUpdatePreservesOffsets(protectedRecord: Bool) throws {
+    let storage = HUDPlacementStore()
+    let protected = Data(#"{"version":99,"value":null}"#.utf8)
+    if protectedRecord { storage.records[AppStateRecord.hudPosition.storageKey] = protected }
+    let state = AppState(storage: storage)
+    let placement = HUDPlacementSession(state: state)
+    placement.recordMove(to: CGRect(x: 15, y: 100, width: 145, height: 116), displays: [primaryHUDDisplay])
+    _ = try placedHUD(placement, expanded: true)
+    let resized = HUDDisplay(id: "primary", workArea: CGRect(x: 200, y: 50, width: 1_620, height: 900))
+    placement.recordMove(to: CGRect(x: 200, y: 150, width: 347, height: 116), displays: [resized])
+    let compact = try placedHUD(placement, displays: [resized])
+    #expect(compact.frame.maxX == 540)
+    #expect(compact.frame.minY == 150)
+    if protectedRecord {
+        #expect(storage.records[AppStateRecord.hudPosition.storageKey] == protected)
+        #expect(state.hudPosition == nil)
+    } else {
+        #expect(state.hudPosition == HUDPosition(rightOffset: 1_280, bottomOffset: 100, displayID: "primary"))
+    }
+}
+
 @Test
 func initialHUDUsesPrimaryUsableAreaAndBottomRightMargins() throws {
     let layout = try hudLayout()
