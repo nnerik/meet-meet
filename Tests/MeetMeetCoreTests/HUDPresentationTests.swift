@@ -25,9 +25,13 @@ private final class HUDPlacementStore: LocalStateStoring {
 
 @MainActor
 private func placedHUD(_ placement: HUDPlacementSession, rows: Int = 2, expanded: Bool = false, characters: Int = 4,
-                       displays: [HUDDisplay] = [primaryHUDDisplay], scroller: Double = 0) throws -> HUDLayout {
-    try #require(placement.layout(rowCount: rows, expanded: expanded, longestCountdownLength: characters,
-                                  displays: displays, legacyScrollerWidth: scroller))
+                       displays: [HUDDisplay] = [primaryHUDDisplay], scroller: Double = 0, pointerDown: Bool = false) throws -> HUDLayout {
+    let update = placement.update(rowCount: rows, expanded: expanded, longestCountdownLength: characters,
+                                  displays: displays, legacyScrollerWidth: scroller, isPointerDown: pointerDown)
+    let layout: HUDLayout?
+    if case let .layout(value, _) = update { layout = value }
+    else { layout = nil }
+    return try #require(layout)
 }
 
 @Test(arguments: [false, true]) @MainActor
@@ -122,7 +126,7 @@ func placementProtectedSaveKeepsLiveRecoveryWithoutChangingDurableState() throws
         _ = try placedHUD(placement, rows: 5, expanded: true)
         #expect(try placedHUD(placement).frame == recovered.frame)
     }
-    #expect(placement.layout(rowCount: 2, expanded: true, longestCountdownLength: 4, displays: []) == nil)
+    #expect(placement.update(rowCount: 2, expanded: true, longestCountdownLength: 4, displays: []) == .hidden)
     #expect(try placedHUD(placement).frame == recovered.frame)
     #expect(placement.positionError != nil)
     #expect(state.hudPosition == nil)
@@ -166,14 +170,174 @@ func placementDefersRecoveryUntilRowsAndValidDisplaysAreAvailable() throws {
     try state.setHUDPosition(preferred)
     let writes = storage.writes
     let placement = HUDPlacementSession(state: state)
-    #expect(placement.layout(rowCount: 0, expanded: true, longestCountdownLength: 4, displays: [primaryHUDDisplay]) == nil)
-    #expect(placement.layout(rowCount: 2, expanded: true, longestCountdownLength: 4, displays: []) == nil)
+    #expect(placement.update(rowCount: 0, expanded: true, longestCountdownLength: 4, displays: [primaryHUDDisplay]) == .hidden)
+    #expect(placement.update(rowCount: 2, expanded: true, longestCountdownLength: 4, displays: []) == .hidden)
     let invalid = HUDDisplay(id: "invalid", workArea: CGRect(x: 0, y: 0, width: 0, height: 0))
-    #expect(placement.layout(rowCount: 2, expanded: true, longestCountdownLength: 4, displays: [invalid]) == nil)
+    #expect(placement.update(rowCount: 2, expanded: true, longestCountdownLength: 4, displays: [invalid]) == .hidden)
     #expect(state.hudPosition == preferred)
     #expect(storage.writes == writes)
     #expect(try placedHUD(placement).displayID == "primary")
     #expect(storage.writes == writes + 1)
+}
+
+@Test(arguments: [HUDPlacementSession.MovementSource.view, .nativeWindow], [false, true]) @MainActor
+func placementFreezesExpansionAndReflowUntilMovementFinishes(source: HUDPlacementSession.MovementSource, initiallyExpanded: Bool) throws {
+    let storage = HUDPlacementStore()
+    let state = AppState(storage: storage)
+    try state.setHUDPosition(HUDPosition(rightOffset: 400, bottomOffset: 100, displayID: "primary"))
+    let placement = HUDPlacementSession(state: state)
+    let initial = try placedHUD(placement, expanded: initiallyExpanded)
+    placement.beginMove(at: initial.frame, source: source)
+    let moved = initial.frame.offsetBy(dx: -50, dy: 80)
+    placement.recordMove(to: moved, displays: [primaryHUDDisplay], isPointerDown: true)
+    let writes = storage.writes
+    for _ in 0..<3 {
+        #expect(placement.update(rowCount: 5, expanded: !initiallyExpanded, longestCountdownLength: 8,
+                                 displays: [primaryHUDDisplay], isPointerDown: true) == .unchanged(expanded: initiallyExpanded))
+    }
+    if source == .view { placement.endMove(at: moved, displays: [primaryHUDDisplay]) }
+    // Native-only movement has no view completion; polling the released pointer
+    // is sufficient. Both paths must now render the latest requested geometry.
+    let after = try placedHUD(placement, rows: 5, expanded: !initiallyExpanded, characters: 8)
+    #expect(after.frame.maxX == moved.maxX)
+    #expect(after.frame.minY == moved.minY)
+    #expect(after.frame.height == 290)
+    #expect((after.titleWidth > 0) == !initiallyExpanded)
+    #expect(storage.writes == writes)
+    let restarted = HUDPlacementSession(state: AppState(storage: storage))
+    let restored = try placedHUD(restarted)
+    #expect(restored.frame.maxX == moved.maxX)
+    #expect(restored.frame.minY == moved.minY)
+}
+
+@Test(arguments: [false, true]) @MainActor
+func placementViewCompletionCapturesMovementWithoutNativeNotifications(didMove: Bool) throws {
+    let storage = HUDPlacementStore()
+    let state = AppState(storage: storage)
+    let placement = HUDPlacementSession(state: state)
+    let initial = try placedHUD(placement)
+    placement.beginMove(at: initial.frame, source: .view)
+    // A released pointer cannot retire a view interaction before its callback.
+    #expect(placement.update(rowCount: 2, expanded: true, longestCountdownLength: 4,
+                             displays: [primaryHUDDisplay]) == .unchanged(expanded: false))
+    let final = didMove ? initial.frame.offsetBy(dx: -120, dy: 80) : initial.frame
+    placement.endMove(at: final, displays: [primaryHUDDisplay])
+    let after = try placedHUD(placement, expanded: true)
+    #expect(after.frame.maxX == final.maxX)
+    #expect(after.frame.minY == final.minY)
+    #expect(storage.writes == (didMove ? 1 : 0))
+    #expect((state.hudPosition != nil) == didMove)
+}
+
+@Test @MainActor
+func placementHandlesOverlappingCallbacksAndNativeMovementOutlivingTheView() throws {
+    let storage = HUDPlacementStore()
+    let state = AppState(storage: storage)
+    let placement = HUDPlacementSession(state: state)
+    let initial = try placedHUD(placement)
+    placement.beginMove(at: initial.frame, source: .nativeWindow)
+    placement.beginMove(at: initial.frame, source: .view)
+    let first = initial.frame.offsetBy(dx: -120, dy: 80)
+    placement.recordMove(to: first, displays: [primaryHUDDisplay], isPointerDown: true)
+    #expect(placement.update(rowCount: 2, expanded: true, longestCountdownLength: 4,
+                             displays: [primaryHUDDisplay]) == .unchanged(expanded: false))
+    placement.endMove(at: first, displays: [primaryHUDDisplay], isPointerDown: true)
+    let last = first.offsetBy(dx: -100, dy: 20)
+    placement.recordMove(to: last, displays: [primaryHUDDisplay], isPointerDown: true)
+    #expect(placement.update(rowCount: 2, expanded: true, longestCountdownLength: 4,
+                             displays: [primaryHUDDisplay], isPointerDown: true) == .unchanged(expanded: false))
+    let after = try placedHUD(placement, expanded: true)
+    #expect(after.frame.maxX == last.maxX)
+    #expect(after.frame.minY == last.minY)
+    #expect(after.titleWidth > 0)
+    #expect(storage.writes == 2)
+    // A late, duplicate completion cannot roll the authoritative anchor back.
+    placement.endMove(at: first, displays: [primaryHUDDisplay])
+    #expect(try placedHUD(placement).frame.maxX == last.maxX)
+    #expect(storage.writes == 2)
+}
+
+@Test @MainActor
+func placementCapturesNativeMovementWhenItsBeginNotificationIsMissing() throws {
+    let storage = HUDPlacementStore()
+    let placement = HUDPlacementSession(state: AppState(storage: storage))
+    let initial = try placedHUD(placement, expanded: true)
+    let moved = initial.frame.offsetBy(dx: -120, dy: 80)
+    placement.recordMove(to: moved, displays: [primaryHUDDisplay], isPointerDown: true)
+    #expect(placement.update(rowCount: 2, expanded: false, longestCountdownLength: 4,
+                             displays: [primaryHUDDisplay], isPointerDown: true) == .unchanged(expanded: true))
+    let released = try placedHUD(placement)
+    #expect(released.frame.maxX == moved.maxX)
+    #expect(released.frame.minY == moved.minY)
+    #expect(released.titleWidth == 0)
+    #expect(storage.writes == 1)
+}
+
+@Test(arguments: [false, true]) @MainActor
+func placementDragRecoveryNeverCommitsTheExpandedRecoveryFrame(protectedRecord: Bool) throws {
+    let storage = HUDPlacementStore()
+    let protected = Data(#"{"version":99,"value":{"savedBy":"a newer version"}}"#.utf8)
+    if protectedRecord { storage.records[AppStateRecord.hudPosition.storageKey] = protected }
+    let state = AppState(storage: storage)
+    let placement = HUDPlacementSession(state: state)
+    let displays = [primaryHUDDisplay, secondaryHUDDisplay]
+    let initial = try placedHUD(placement, expanded: true, displays: displays)
+    placement.beginMove(at: initial.frame, source: .view)
+    let moved = CGRect(x: -1_447, y: 300, width: 347, height: 116)
+    placement.recordMove(to: moved, displays: displays, isPointerDown: true)
+    #expect(placement.update(rowCount: 5, expanded: false, longestCountdownLength: 4,
+                             displays: displays, isPointerDown: true) == .unchanged(expanded: true))
+    #expect(placement.update(rowCount: 0, expanded: false, longestCountdownLength: 4,
+                             displays: [primaryHUDDisplay], isPointerDown: true) == .hidden)
+
+    // Display inputs change during the drag without a special caller flag.
+    // Titles remain frozen, and the recovered expanded frame clamps leftward.
+    let recovered = try placedHUD(placement, expanded: false, pointerDown: true)
+    #expect(recovered.frame.minX == 0)
+    #expect(recovered.frame.maxX == 347)
+    #expect(recovered.titleWidth == 190)
+    placement.endMove(at: recovered.frame, displays: [primaryHUDDisplay])
+    let compact = try placedHUD(placement)
+    #expect(compact.frame.maxX == 340)
+    #expect(compact.frame.minY == 200)
+    for _ in 0..<3 {
+        _ = try placedHUD(placement, rows: 5, expanded: true)
+        #expect(try placedHUD(placement).frame == compact.frame)
+    }
+    #expect(storage.writes == (protectedRecord ? 0 : 2))
+    #expect((placement.positionError != nil) == protectedRecord)
+
+    let durable = AppState(storage: storage)
+    let restarted = HUDPlacementSession(state: durable)
+    let restored = try placedHUD(restarted, displays: displays)
+    if protectedRecord {
+        #expect(durable.hudPosition == nil)
+        #expect(restored.frame.maxX == 1_416)
+        #expect(restored.frame.minY == 24)
+        #expect(storage.records[AppStateRecord.hudPosition.storageKey] == protected)
+    } else {
+        #expect(durable.hudPosition == HUDPosition(rightOffset: 1_100, bottomOffset: 200, displayID: "primary"))
+        #expect(restored.frame == compact.frame)
+    }
+}
+
+@Test(arguments: [false, true]) @MainActor
+func placementHidingPreservesPendingMovementWhileStoppingCancelsIt(hide: Bool) throws {
+    let storage = HUDPlacementStore()
+    let placement = HUDPlacementSession(state: AppState(storage: storage))
+    let initial = try placedHUD(placement, expanded: true)
+    placement.beginMove(at: initial.frame, source: .view)
+    if hide {
+        #expect(placement.update(rowCount: 0, expanded: true, longestCountdownLength: 4,
+                                 displays: [primaryHUDDisplay]) == .hidden)
+        #expect(placement.update(rowCount: 2, expanded: false, longestCountdownLength: 4,
+                                 displays: [primaryHUDDisplay]) == .unchanged(expanded: true))
+        placement.endMove(at: initial.frame, displays: [primaryHUDDisplay])
+    } else { placement.resetMovement() }
+    let restored = try placedHUD(placement)
+    #expect(restored.titleWidth == 0)
+    #expect(restored.frame.maxX == initial.frame.maxX)
+    #expect(storage.writes == 0)
 }
 
 @Test

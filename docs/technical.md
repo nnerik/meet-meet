@@ -153,6 +153,13 @@ publishing, packaging checks and distribution limitations.
   layout ordering, movement persistence and failed-save live fallback. A failed
   save leaves the durable record untouched and reports the error; refresh uses
   the live anchor, while restart uses only durable state and normal recovery.
+  Its update result tells the native caller to hide, retain the current frame,
+  or apply a layout. Movement holds title expansion and reflow until completion,
+  including overlapping view/native callbacks and temporary empty refreshes.
+  Display changes are detected from the supplied geometry and can recover during
+  movement; that layout-generated frame becomes accounted for, not a new dragged
+  anchor when a later view callback ends. Native-only movement releases when the
+  pointer is up; stopping explicitly cancels the interaction.
   Pure `HUDLayoutPolicy` tests placement/clamping/overflow without windows;
   `HUDRevealState` uses elapsed monotonic time for arrival-title timing.
   Native window-move notifications save the authoritative anchor; controller
@@ -211,6 +218,16 @@ provider identity and production lifecycle/accessibility checks belong to the
 integration acceptance tickets. Actual pointer dragging/wheel input, Spaces,
 full-screen, display unplugging and VoiceOver still need live acceptance;
 geometry and window-configuration tests do not prove that whole matrix.
+
+HUD placement validation for #29 (2026-10-27): deterministic tests cover frozen
+expansion, overlapping/missing movement callbacks, display recovery during an
+empty refresh, protected-record save failures, and live versus durable restart.
+Native tests replay the real view-adapter callbacks and native window-move
+notifications, including deferred reflow and failed saves. Real pointer dragging
+and physical display unplugging were **not performed** in this agent run; no
+hardware-disconnection or physical-input control was available through the test
+harness. Those checks still need owner validation and are not implied by the
+synthetic results.
 
 State uses app-local UserDefaults data records. Loading does not rewrite saved
 data: malformed preference fields fall back individually, unreadable records

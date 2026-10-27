@@ -230,6 +230,55 @@ func nativeHUDProtectedPlacementKeepsItsLiveAnchorAndReportsTheFailedSave() asyn
     #expect(storage.writes == writes)
 }
 
+@Test(arguments: [false, true]) @MainActor
+func nativeHUDViewDragDefersReflowAndKeepsItsAuthoritativeAnchor(protectedRecord: Bool) async throws {
+    let application = NSApplication.shared
+    let protected = Data(#"{"version":99,"value":{"savedBy":"a newer version"}}"#.utf8)
+    let storage = NativeHUDMemoryStore(records: protectedRecord ? [AppStateRecord.hudPosition.storageKey: protected] : [:])
+    let state = AppState(storage: storage)
+    try state.setSelectedCalendarIDs(["fixture"])
+    let reader = NativeHUDCalendarFixture(count: 1)
+    let session = CalendarSession(reader: reader, state: state)
+    await session.refresh()
+    let before = Set(application.windows.map { ObjectIdentifier($0) })
+    let controller = CountdownHUDController(state: state, session: session)
+    let window = try #require(application.windows.first {
+        !before.contains(ObjectIdentifier($0)) && $0.identifier?.rawValue == "meetmeet.countdownHUD"
+    })
+    defer { controller.stop(); window.close() }
+    controller.start()
+    let initial = window.frame
+    let writes = storage.writes
+    // Replay the same adapter callbacks used around performDrag, plus a real
+    // window-move notification. This is not a physical pointer-drag check.
+    controller.beginViewDrag()
+    window.setFrameOrigin(NSPoint(x: initial.minX - 120, y: initial.minY + 80))
+    let moved = window.frame
+    await reader.addMeeting()
+    await session.refresh()
+    for _ in 0..<10 { await Task.yield() }
+    #expect(session.presentation.hudRows.count == 2)
+    #expect(window.frame == moved)
+    controller.endViewDrag()
+    #expect(await waitForHUD { window.frame.height > initial.height })
+    for _ in 0..<3 {
+        session.tick()
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(window.frame.maxX == moved.maxX)
+    #expect(window.frame.minY == moved.minY)
+    #expect(storage.writes == writes + (protectedRecord ? 0 : 1))
+    if protectedRecord {
+        #expect(controller.positionError != nil)
+        #expect(state.hudPosition == nil)
+        #expect(storage.data(forKey: AppStateRecord.hudPosition.storageKey) == protected)
+    } else {
+        #expect(controller.positionError == nil)
+        #expect(state.hudPosition != nil)
+        #expect(AppState(storage: storage).hudPosition == state.hudPosition)
+    }
+}
+
 @Test @MainActor
 func nativeHUDCueWigglesOnlyCurrentlyVisibleRowsAndDoesNotRetriggerOnTicks() async throws {
     let application = NSApplication.shared

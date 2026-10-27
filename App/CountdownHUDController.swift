@@ -18,12 +18,9 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
     private var observers: Set<AnyCancellable> = []
     private var running = false
     private var observationGeneration = 0
-    private var dragOrigin: NSRect?
-    private var frozenExpansion: Bool?
     private var currentLayout: HUDLayout?
     private let revealOrigin = ContinuousClock().now
     private var layoutMoveDepth = 0
-    private var nativeDragInProgress = false
 
     var positionError: String? { placement.positionError }
 
@@ -74,12 +71,8 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary, .canJoinAllApplications]
         panel.setAccessibilityLabel("Meeting countdowns")
         content.hoverChanged = { [weak self] hovering in self?.hoverChanged(hovering) }
-        content.dragBegan = { [weak self] in
-            guard let self else { return }
-            self.dragOrigin = self.panel.frame
-            self.frozenExpansion = self.model.expanded
-        }
-        content.dragEnded = { [weak self] in self?.dragEnded() }
+        content.dragBegan = { [weak self] in self?.beginViewDrag() }
+        content.dragEnded = { [weak self] in self?.endViewDrag() }
     }
 
     func start() {
@@ -88,7 +81,7 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         observationGeneration += 1
         NotificationCenter.default.publisher(for: NSApplication.didChangeScreenParametersNotification)
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in self?.synchronize(forceLayout: true) }
+            .sink { [weak self] _ in self?.synchronize() }
             .store(in: &observers)
         observe(observationGeneration)
     }
@@ -104,9 +97,7 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         model.expanded = false
         reveal = HUDRevealState()
         currentLayout = nil
-        dragOrigin = nil
-        frozenExpansion = nil
-        nativeDragInProgress = false
+        placement.resetMovement()
         panel.orderOut(nil)
     }
 
@@ -123,12 +114,8 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         synchronize()
     }
 
-    private func synchronize(forceLayout: Bool = false) {
+    private func synchronize() {
         guard running else { return }
-        if nativeDragInProgress && NSEvent.pressedMouseButtons & 1 == 0 {
-            nativeDragInProgress = false
-            if dragOrigin == nil { frozenExpansion = nil }
-        }
         let rows = session.presentation.hudRows
         let previousDeadline = reveal.arrivalUntil
         reveal.update(visibleIDs: Set(rows.map(\.id)), at: revealNow)
@@ -136,13 +123,22 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         let visible = Set(rows.map(\.id))
         model.cueWiggles = model.cueWiggles.filter { visible.contains($0.key) }
         if previousDeadline != reveal.arrivalUntil { scheduleRevealExpiry() }
-        guard !rows.isEmpty else {
+        let scrollerWidth = NSScroller.preferredScrollerStyle == .legacy
+            ? Double(NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)) : 0
+        let update = placement.update(rowCount: rows.count, expanded: reveal.isExpanded(at: revealNow),
+                                      longestCountdownLength: rows.map { $0.text.count }.max() ?? 4,
+                                      displays: Self.displays(), legacyScrollerWidth: scrollerWidth,
+                                      isPointerDown: NSEvent.pressedMouseButtons & 1 != 0)
+        switch update {
+        case .hidden:
             model.expanded = false
             panel.orderOut(nil)
-            return
+        case let .unchanged(expanded):
+            model.expanded = expanded
+        case let .layout(layout, expanded):
+            model.expanded = expanded
+            applyLayout(layout)
         }
-        model.expanded = frozenExpansion ?? reveal.isExpanded(at: revealNow)
-        if (dragOrigin == nil && !nativeDragInProgress) || forceLayout { applyLayout() }
     }
 
     private func hoverChanged(_ hovering: Bool) {
@@ -165,16 +161,7 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         }
     }
 
-    private func applyLayout() {
-        let displays = Self.displays()
-        let longest = model.rows.map { $0.text.count }.max() ?? 4
-        let scrollerWidth = NSScroller.preferredScrollerStyle == .legacy
-            ? Double(NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)) : 0
-        guard let layout = placement.layout(rowCount: model.rows.count, expanded: model.expanded, longestCountdownLength: longest,
-                                          displays: displays, legacyScrollerWidth: scrollerWidth) else {
-            panel.orderOut(nil)
-            return
-        }
+    private func applyLayout(_ layout: HUDLayout) {
         model.timerWidth = layout.timerWidth
         model.titleWidth = layout.titleWidth
         model.documentWidth = layout.documentSize.width
@@ -194,28 +181,26 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
             let hovering = panel.frame.contains(NSEvent.mouseLocation)
             reveal.setHovering(hovering)
             if hovering && !model.expanded {
-                model.expanded = true
-                applyLayout()
+                synchronize()
             }
         }
     }
 
-    private func dragEnded() {
+    func beginViewDrag() {
         guard running else { return }
-        let origin = dragOrigin
-        dragOrigin = nil
-        frozenExpansion = nil
-        if let origin, origin.origin != panel.frame.origin {
-            placement.recordMove(to: panel.frame, displays: Self.displays())
-        }
+        placement.beginMove(at: panel.frame, source: .view)
+    }
+
+    func endViewDrag() {
+        guard running else { return }
+        placement.endMove(at: panel.frame, displays: Self.displays(), isPointerDown: NSEvent.pressedMouseButtons & 1 != 0)
         reveal.setHovering(panel.frame.contains(NSEvent.mouseLocation))
         synchronize()
     }
 
     func windowWillMove(_ notification: Notification) {
         guard running, layoutMoveDepth == 0, NSEvent.pressedMouseButtons & 1 != 0 else { return }
-        nativeDragInProgress = true
-        frozenExpansion = frozenExpansion ?? model.expanded
+        placement.beginMove(at: panel.frame, source: .nativeWindow)
     }
 
     func windowDidMove(_ notification: Notification) {
@@ -223,11 +208,7 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         // Native window-manager movement can bypass or outlive view drag
         // callbacks. Capture the authoritative anchor before a clock refresh
         // can reapply an old one. Our own expansion/reflow moves are excluded.
-        if NSEvent.pressedMouseButtons & 1 != 0 {
-            nativeDragInProgress = true
-            frozenExpansion = frozenExpansion ?? model.expanded
-        }
-        placement.recordMove(to: panel.frame, displays: Self.displays())
+        placement.recordMove(to: panel.frame, displays: Self.displays(), isPointerDown: NSEvent.pressedMouseButtons & 1 != 0)
     }
 
     private static func displays() -> [HUDDisplay] {
