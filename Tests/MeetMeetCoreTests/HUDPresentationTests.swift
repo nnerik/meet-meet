@@ -15,6 +15,167 @@ private func hudLayout(rows: Int = 2, expanded: Bool = false, characters: Int = 
                                        preferredPosition: position, displays: displays, legacyScrollerWidth: scroller))
 }
 
+@MainActor
+private final class HUDPlacementStore: LocalStateStoring {
+    var records: [String: Data] = [:]
+    private(set) var writes = 0
+    func data(forKey key: String) -> Data? { records[key] }
+    func set(_ data: Data?, forKey key: String) { records[key] = data; writes += 1 }
+}
+
+@MainActor
+private func placedHUD(_ placement: HUDPlacementSession, rows: Int = 2, expanded: Bool = false, characters: Int = 4,
+                       displays: [HUDDisplay] = [primaryHUDDisplay], scroller: Double = 0) throws -> HUDLayout {
+    try #require(placement.layout(rowCount: rows, expanded: expanded, longestCountdownLength: characters,
+                                  displays: displays, legacyScrollerWidth: scroller))
+}
+
+@Test(arguments: [false, true]) @MainActor
+func placementRecoveryPersistsTheCompactAnchorBeforeTemporaryExpansion(expanded: Bool) throws {
+    let storage = HUDPlacementStore()
+    let state = AppState(storage: storage)
+    try state.setHUDPosition(HUDPosition(rightOffset: 1_280, bottomOffset: 100, displayID: "unplugged"))
+    let writes = storage.writes
+    let placement = HUDPlacementSession(state: state)
+    let recovered = try placedHUD(placement, expanded: expanded)
+    let saved = HUDPosition(rightOffset: 1_280, bottomOffset: 100, displayID: "primary")
+    #expect(state.hudPosition == saved)
+    #expect(recovered.displayID == "primary")
+    #expect(recovered.frame.minX == (expanded ? 0 : 15))
+    #expect(storage.writes == writes + 1)
+    #expect(placement.positionError == nil)
+    let compact = try placedHUD(placement)
+    #expect(compact.frame.maxX == 160)
+    #expect(compact.frame.minY == 100)
+    #expect(storage.writes == writes + 1)
+    let restarted = HUDPlacementSession(state: AppState(storage: storage))
+    #expect(try placedHUD(restarted).frame == compact.frame)
+    #expect(storage.writes == writes + 1)
+}
+
+@Test @MainActor
+func placementMigratesLegacyAnchorsBeforeExpansionAndSurvivesRestart() throws {
+    let storage = HUDPlacementStore()
+    storage.records[AppStateRecord.hudPosition.storageKey] = Data(#"{"version":1,"value":{"topRightX":-100,"topRightY":800,"displayID":"secondary"}}"#.utf8)
+    let state = AppState(storage: storage)
+    let placement = HUDPlacementSession(state: state)
+    let displays = [primaryHUDDisplay, secondaryHUDDisplay]
+    let expanded = try placedHUD(placement, rows: 1, expanded: true, displays: displays)
+    #expect(expanded.frame.maxX == -100)
+    #expect(expanded.frame.maxY == 800)
+    #expect(state.hudPosition == HUDPosition(rightOffset: 100, bottomOffset: 642, displayID: "secondary"))
+    #expect(storage.writes == 1)
+    let restarted = HUDPlacementSession(state: AppState(storage: storage))
+    #expect(try placedHUD(restarted, rows: 1, expanded: true, displays: displays).frame == expanded.frame)
+    #expect(storage.writes == 1)
+}
+
+@Test @MainActor
+func placementRetainsPreferredOffsetsThroughReflowClampingAndDisplayRelocation() throws {
+    let storage = HUDPlacementStore()
+    let state = AppState(storage: storage)
+    let preferred = HUDPosition(rightOffset: 40, bottomOffset: 700, displayID: "primary")
+    try state.setHUDPosition(preferred)
+    let writes = storage.writes
+    let placement = HUDPlacementSession(state: state)
+    let single = try placedHUD(placement, rows: 1)
+    let tall = try placedHUD(placement, rows: 30, expanded: true, characters: 8, scroller: 15)
+    #expect(tall.needsScrolling)
+    #expect(tall.frame.minY < single.frame.minY)
+    #expect(tall == (try hudLayout(rows: 30, expanded: true, characters: 8, position: preferred, scroller: 15)))
+    #expect(state.hudPosition == preferred)
+    #expect(try placedHUD(placement, rows: 1).frame == single.frame)
+    #expect(storage.writes == writes)
+
+    let relocated = HUDDisplay(id: "primary", workArea: CGRect(x: -500, y: -600, width: 1_000, height: 900))
+    let layout = try placedHUD(placement, rows: 1, displays: [relocated])
+    #expect(layout.frame.maxX == relocated.workArea.maxX - 40)
+    #expect(layout.frame.minY == relocated.workArea.minY + 700)
+    #expect(state.hudPosition == preferred)
+    #expect(storage.writes == writes)
+}
+
+@Test @MainActor
+func placementProtectedSaveKeepsLiveRecoveryWithoutChangingDurableState() throws {
+    let storage = HUDPlacementStore()
+    let protected = Data(#"{"version":99,"value":{"savedBy":"a newer version"}}"#.utf8)
+    storage.records[AppStateRecord.hudPosition.storageKey] = protected
+    let state = AppState(storage: storage)
+    let placement = HUDPlacementSession(state: state)
+    let displays = [primaryHUDDisplay, secondaryHUDDisplay]
+    let moved = CGRect(x: -1_245, y: 300, width: 145, height: 116)
+    placement.recordMove(to: moved, displays: displays)
+    #expect(state.hudPosition == nil)
+    #expect(placement.positionError?.contains("Position could not be saved") == true)
+    #expect(try placedHUD(placement, displays: displays).frame == moved)
+
+    // The saved display disappears while titles are expanded. Recovery must
+    // preserve the compact right anchor even though expansion clamps leftward.
+    let expanded = try placedHUD(placement, expanded: true)
+    #expect(expanded.displayID == "primary")
+    #expect(expanded.frame.minX == 0)
+    #expect(expanded.frame.maxX == 347)
+    let recovered = try placedHUD(placement)
+    #expect(recovered.frame.maxX == 340)
+    #expect(recovered.frame.minY == 200)
+    for _ in 0..<3 {
+        _ = try placedHUD(placement, rows: 5, expanded: true)
+        #expect(try placedHUD(placement).frame == recovered.frame)
+    }
+    #expect(placement.layout(rowCount: 2, expanded: true, longestCountdownLength: 4, displays: []) == nil)
+    #expect(try placedHUD(placement).frame == recovered.frame)
+    #expect(placement.positionError != nil)
+    #expect(state.hudPosition == nil)
+    #expect(storage.records[AppStateRecord.hudPosition.storageKey] == protected)
+    #expect(storage.writes == 0)
+
+    let restartedState = AppState(storage: storage)
+    let restarted = HUDPlacementSession(state: restartedState)
+    let afterRestart = try placedHUD(restarted, displays: displays)
+    #expect(afterRestart.displayID == "primary")
+    #expect(afterRestart.frame.maxX == 1_416)
+    #expect(afterRestart.frame.minY == 24)
+    #expect(afterRestart.frame != recovered.frame)
+    #expect(restartedState.hudPosition == nil)
+    #expect(storage.records[AppStateRecord.hudPosition.storageKey] == protected)
+    #expect(storage.writes == 0)
+}
+
+@Test @MainActor
+func placementRecordsNativeAnchorsOnceAndRestoresTheirDisplayRelativeOffsets() throws {
+    let storage = HUDPlacementStore()
+    let state = AppState(storage: storage)
+    let placement = HUDPlacementSession(state: state)
+    let displays = [primaryHUDDisplay, secondaryHUDDisplay]
+    let moved = CGRect(x: -600, y: 300, width: 145, height: 116)
+    placement.recordMove(to: moved, displays: displays)
+    #expect(state.hudPosition == HUDPosition(rightOffset: 455, bottomOffset: 200, displayID: "secondary"))
+    #expect(placement.positionError == nil)
+    placement.recordMove(to: moved, displays: displays)
+    #expect(storage.writes == 1)
+    let restarted = HUDPlacementSession(state: AppState(storage: storage))
+    #expect(try placedHUD(restarted, displays: displays).frame == moved)
+    #expect(storage.writes == 1)
+}
+
+@Test @MainActor
+func placementDefersRecoveryUntilRowsAndValidDisplaysAreAvailable() throws {
+    let storage = HUDPlacementStore()
+    let state = AppState(storage: storage)
+    let preferred = HUDPosition(rightOffset: 40, bottomOffset: 100, displayID: "unplugged")
+    try state.setHUDPosition(preferred)
+    let writes = storage.writes
+    let placement = HUDPlacementSession(state: state)
+    #expect(placement.layout(rowCount: 0, expanded: true, longestCountdownLength: 4, displays: [primaryHUDDisplay]) == nil)
+    #expect(placement.layout(rowCount: 2, expanded: true, longestCountdownLength: 4, displays: []) == nil)
+    let invalid = HUDDisplay(id: "invalid", workArea: CGRect(x: 0, y: 0, width: 0, height: 0))
+    #expect(placement.layout(rowCount: 2, expanded: true, longestCountdownLength: 4, displays: [invalid]) == nil)
+    #expect(state.hudPosition == preferred)
+    #expect(storage.writes == writes)
+    #expect(try placedHUD(placement).displayID == "primary")
+    #expect(storage.writes == writes + 1)
+}
+
 @Test
 func initialHUDUsesPrimaryUsableAreaAndBottomRightMargins() throws {
     let layout = try hudLayout()

@@ -148,8 +148,12 @@ publishing, packaging checks and distribution limitations.
   rather than owning a separate audio orchestration path. The menu title reacts
   to session changes, and unchanged titles are not rewritten on every tick.
 - `App/CountdownHUDController.swift` owns the nonactivating panel and passive
-  SwiftUI rows, native dragging/scrolling and display recovery. Pure
-  `HUDLayoutPolicy` tests placement/clamping/overflow without windows;
+  SwiftUI rows, native dragging/scrolling and display-change notifications.
+  `HUDPlacementSession` owns preferred-anchor recovery, compact-before-expanded
+  layout ordering, movement persistence and failed-save live fallback. A failed
+  save leaves the durable record untouched and reports the error; refresh uses
+  the live anchor, while restart uses only durable state and normal recovery.
+  Pure `HUDLayoutPolicy` tests placement/clamping/overflow without windows;
   `HUDRevealState` uses elapsed monotonic time for arrival-title timing.
   Native window-move notifications save the authoritative anchor; controller
   layout moves are excluded so refreshes and title expansion cannot reset it.

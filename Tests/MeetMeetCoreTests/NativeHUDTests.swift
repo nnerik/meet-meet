@@ -10,6 +10,7 @@ import MeetMeetCore
 private final class NativeHUDMemoryStore: LocalStateStoring {
     private var records: [String: Data] = [:]
     private(set) var writes = 0
+    init(records: [String: Data] = [:]) { self.records = records }
     func data(forKey key: String) -> Data? { records[key] }
     func set(_ data: Data?, forKey key: String) { records[key] = data; writes += 1 }
 }
@@ -195,6 +196,40 @@ func nativeHUDLayoutChangesDoNotOverwriteThePreferredPosition() async throws {
     #expect(state.hudPosition == preferred)
     #expect(storage.writes == writesBeforeLayout)
 }
+
+@Test @MainActor
+func nativeHUDProtectedPlacementKeepsItsLiveAnchorAndReportsTheFailedSave() async throws {
+    let application = NSApplication.shared
+    let protected = Data(#"{"version":99,"value":{"savedBy":"a newer version"}}"#.utf8)
+    let storage = NativeHUDMemoryStore(records: [AppStateRecord.hudPosition.storageKey: protected])
+    let state = AppState(storage: storage)
+    try state.setSelectedCalendarIDs(["fixture"])
+    let session = CalendarSession(reader: NativeHUDCalendarFixture(count: 1), state: state)
+    await session.refresh()
+    let before = Set(application.windows.map { ObjectIdentifier($0) })
+    let controller = CountdownHUDController(state: state, session: session)
+    let window = try #require(application.windows.first {
+        !before.contains(ObjectIdentifier($0)) && $0.identifier?.rawValue == "meetmeet.countdownHUD"
+    })
+    defer { controller.stop(); window.close() }
+    controller.start()
+    let writes = storage.writes
+    let initial = window.frame
+    window.setFrameOrigin(NSPoint(x: initial.minX - 120, y: initial.minY + 80))
+    let movedAnchor = NSPoint(x: window.frame.maxX, y: window.frame.minY)
+    #expect(controller.positionError?.contains("Position could not be saved") == true)
+    for _ in 0..<3 {
+        session.tick()
+        try await Task.sleep(for: .milliseconds(10))
+    }
+    #expect(NSPoint(x: window.frame.maxX, y: window.frame.minY) == movedAnchor)
+    #expect(controller.positionError?.contains("another app version") == true)
+    #expect(state.hudPosition == nil)
+    #expect(AppState(storage: storage).hudPosition == nil)
+    #expect(storage.data(forKey: AppStateRecord.hudPosition.storageKey) == protected)
+    #expect(storage.writes == writes)
+}
+
 @Test @MainActor
 func nativeHUDCueWigglesOnlyCurrentlyVisibleRowsAndDoesNotRetriggerOnTicks() async throws {
     let application = NSApplication.shared

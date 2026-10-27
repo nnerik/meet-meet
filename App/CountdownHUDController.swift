@@ -9,6 +9,7 @@ import SwiftUI
 final class CountdownHUDController: NSObject, NSWindowDelegate {
     private let state: AppState
     private let session: CalendarSession
+    private let placement: HUDPlacementSession
     private let model: HUDViewModel
     private let panel: CountdownPanel
     private let content: HUDInteractionView
@@ -19,13 +20,12 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
     private var observationGeneration = 0
     private var dragOrigin: NSRect?
     private var frozenExpansion: Bool?
-    private var transientPosition: HUDPosition?
     private var currentLayout: HUDLayout?
     private let revealOrigin = ContinuousClock().now
     private var layoutMoveDepth = 0
     private var nativeDragInProgress = false
 
-    var positionError: String? { model.positionError }
+    var positionError: String? { placement.positionError }
 
     /// Only cue-time visible rows participate. Never reveal or retain a row for an alert.
     func showCueWiggles(for occurrences: [OccurrenceKey]) {
@@ -48,7 +48,9 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
     init(state: AppState, session: CalendarSession) {
         self.state = state
         self.session = session
-        let model = HUDViewModel()
+        let placement = HUDPlacementSession(state: state)
+        self.placement = placement
+        let model = HUDViewModel(placement: placement)
         self.model = model
         let panel = CountdownPanel(contentRect: NSRect(x: 0, y: 0, width: 145, height: 58),
                                    styleMask: [.borderless, .nonactivatingPanel], backing: .buffered, defer: false)
@@ -168,15 +170,8 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         let longest = model.rows.map { $0.text.count }.max() ?? 4
         let scrollerWidth = NSScroller.preferredScrollerStyle == .legacy
             ? Double(NSScroller.scrollerWidth(for: .regular, scrollerStyle: .legacy)) : 0
-        if HUDLayoutPolicy.needsPositionRecovery(transientPosition ?? state.hudPosition, displays: displays),
-           let compact = HUDLayoutPolicy.layout(rowCount: model.rows.count, expanded: false, longestCountdownLength: longest,
-                                                preferredPosition: transientPosition ?? state.hudPosition, displays: displays, legacyScrollerWidth: scrollerWidth) {
-            if let position = HUDLayoutPolicy.position(for: compact.frame, displays: displays) {
-                savePosition(position)
-            }
-        }
-        guard let layout = HUDLayoutPolicy.layout(rowCount: model.rows.count, expanded: model.expanded, longestCountdownLength: longest,
-                                                  preferredPosition: transientPosition ?? state.hudPosition, displays: displays, legacyScrollerWidth: scrollerWidth) else {
+        guard let layout = placement.layout(rowCount: model.rows.count, expanded: model.expanded, longestCountdownLength: longest,
+                                          displays: displays, legacyScrollerWidth: scrollerWidth) else {
             panel.orderOut(nil)
             return
         }
@@ -211,9 +206,7 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         dragOrigin = nil
         frozenExpansion = nil
         if let origin, origin.origin != panel.frame.origin {
-            if let position = HUDLayoutPolicy.position(for: panel.frame, displays: Self.displays()) {
-                savePosition(position)
-            }
+            placement.recordMove(to: panel.frame, displays: Self.displays())
         }
         reveal.setHovering(panel.frame.contains(NSEvent.mouseLocation))
         synchronize()
@@ -234,22 +227,7 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
             nativeDragInProgress = true
             frozenExpansion = frozenExpansion ?? model.expanded
         }
-        if let position = HUDLayoutPolicy.position(for: panel.frame, displays: Self.displays()) {
-            savePosition(position)
-        }
-    }
-
-    private func savePosition(_ position: HUDPosition) {
-        guard position != state.hudPosition else { return }
-        do {
-            try state.setHUDPosition(position)
-            transientPosition = nil
-            model.positionError = nil
-        } catch {
-            // Keep the live panel usable, but do not pretend a failed write saved.
-            model.positionError = "Position could not be saved. " + error.localizedDescription
-            transientPosition = position
-        }
+        placement.recordMove(to: panel.frame, displays: Self.displays())
     }
 
     private static func displays() -> [HUDDisplay] {
@@ -273,13 +251,17 @@ private final class CountdownPanel: NSPanel {
 
 @MainActor @Observable
 private final class HUDViewModel {
+    private let placement: HUDPlacementSession
+
+    init(placement: HUDPlacementSession) { self.placement = placement }
+
     var cueWiggles: [OccurrenceKey: UUID] = [:]
     var rows: [CountdownRow] = []
     var expanded = false
     var timerWidth = 82.0
     var titleWidth = 190.0
     var documentWidth = 145.0
-    var positionError: String?
+    var positionError: String? { placement.positionError }
 }
 
 private struct CountdownRowsView: View {
