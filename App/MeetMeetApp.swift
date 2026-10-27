@@ -68,16 +68,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(.separator())
         }
         if session.status == .ready {
-            let presentation = session.presentation
+            let presentation = session.meetingMenu
             if presentation.remainingToday.isEmpty { addLabel("No remaining meetings today", to: menu) }
-            for event in presentation.remainingToday {
-                let ongoing = event.phase(at: session.now) == .ongoing
-                let time = formattedTime(ongoing ? event.end : event.start)
-                addMeeting(event, title: "\(ongoing ? "Until " : "")\(time)  \(MeetingText.displayTitle(event.title))", to: menu)
+            for entry in presentation.remainingToday {
+                addMeeting(entry, to: menu)
             }
-            if case let .upcoming(meetings, true) = presentation.summary {
+            if !presentation.tomorrow.isEmpty {
                 menu.addItem(.separator())
-                for event in meetings { addMeeting(event, title: "Tomorrow \(formattedTime(event.start))  \(MeetingText.displayTitle(event.title))", to: menu) }
+                for entry in presentation.tomorrow { addMeeting(entry, isTomorrow: true, to: menu) }
             }
         } else {
             addLabel(session.status.message, to: menu)
@@ -104,43 +102,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         item.toolTip = title
     }
 
-    private func addMeeting(_ event: MeetingOccurrence, title: String, to menu: NSMenu) {
-        let item = menu.addItem(withTitle: title, action: nil, keyEquivalent: "")
-        let calendarTitle = session.calendars.first { $0.id == event.calendarID }?.title ?? "Calendar"
-        let phase = event.phase(at: session.now) == .ongoing ? "Ongoing" : "Upcoming"
-        item.setAccessibilityLabel("\(phase): \(MeetingText.displayTitle(event.title)), \(calendarTitle), starts \(event.start.formatted()), ends \(event.end.formatted())")
-        item.toolTip = MeetingText.displayTitle(event.title)
-        let submenu = NSMenu()
-        submenu.autoenablesItems = false
-        addLabel(MeetingText.displayTitle(event.title), to: submenu)
-        addLabel("\(phase) · \(calendarTitle)", to: submenu)
-        addLabel("Starts: \(event.start.formatted(date: .abbreviated, time: .shortened))", to: submenu)
-        addLabel("Ends: \(event.end.formatted(date: .abbreviated, time: .shortened))", to: submenu)
-        if let location = event.location, !location.isEmpty { addLabel("Location: " + location, to: submenu) }
-        if let url = event.url { addLabel(url.absoluteString, to: submenu) }
-        submenu.addItem(.separator())
-        let occurrence = addMeetingAction("Hide this meeting", selector: #selector(hideOccurrence(_:)), event: event, to: submenu)
-        occurrence.isEnabled = event.identityEvidence != nil
-        let series = addMeetingAction("Hide this series", selector: #selector(hideSeries(_:)), event: event, to: submenu)
-        series.isEnabled = event.identityEvidence?.isRecurring == true || event.identityEvidence?.isDetached == true
-        submenu.addItem(.separator())
-        let visibility = session.reminders.visibility(of: session.occurrences, at: Date())
-        if visibility.suppressedCountdowns.contains(event.key) {
-            addMeetingAction("Show countdown now", selector: #selector(restoreCountdown(_:)), event: event, to: submenu)
-        } else {
-            let suppress = addMeetingAction("Hide countdown until final minute", selector: #selector(suppressCountdown(_:)), event: event, to: submenu)
-            let boundary = event.start > Date() ? event.start : event.end
-            suppress.isEnabled = boundary.timeIntervalSinceNow > 60
+    private func addMeeting(_ entry: MeetingMenuEntry, isTomorrow: Bool = false, to menu: NSMenu) {
+        let item = MeetingMenuItem(entry: entry, isTomorrow: isTomorrow, formatTime: formattedTime) { [weak self] action, sender in
+            switch action {
+            case .hideOccurrence: self?.hideOccurrence(sender)
+            case .hideSeries: self?.hideSeries(sender)
+            case .suppressCountdown: self?.suppressCountdown(sender)
+            case .restoreCountdown: self?.restoreCountdown(sender)
+            }
         }
-        item.submenu = submenu
-    }
-
-    @discardableResult
-    private func addMeetingAction(_ title: String, selector: Selector, event: MeetingOccurrence, to menu: NSMenu) -> NSMenuItem {
-        let item = menu.addItem(withTitle: title, action: selector, keyEquivalent: "")
-        item.target = self
-        item.representedObject = event.key
-        return item
+        menu.addItem(item)
     }
 
     private func performReminderAction(_ sender: NSMenuItem, action: (MeetingOccurrence) throws -> Void) {

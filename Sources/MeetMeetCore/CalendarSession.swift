@@ -56,11 +56,28 @@ public final class CalendarSession {
     }
 
     public var presentation: MeetingPresentation {
+        presentation(visibility: reminders.visibility(of: occurrences, at: now))
+    }
+
+    public var meetingMenu: MeetingMenuPresentation {
+        let visibility = reminders.visibility(of: occurrences, at: now)
+        let presentation = presentation(visibility: visibility)
+        func entry(_ meeting: MeetingOccurrence) -> MeetingMenuEntry {
+            MeetingMenuEntry(meeting: meeting,
+                             calendarTitle: calendars.first { $0.id == meeting.calendarID }?.title ?? "Calendar",
+                             isCountdownSuppressed: visibility.suppressedCountdowns.contains(meeting.key), at: now)
+        }
+        let tomorrow: [MeetingMenuEntry]
+        if case let .upcoming(meetings, true) = presentation.summary { tomorrow = meetings.map(entry) }
+        else { tomorrow = [] }
+        return MeetingMenuPresentation(remainingToday: presentation.remainingToday.map(entry), tomorrow: tomorrow)
+    }
+
+    private func presentation(visibility: ReminderVisibility) -> MeetingPresentation {
         guard status == .ready,
               let policy = try? MeetingPolicy(calendar: calendarProvider(), preferences: state.preferences) else {
             return MeetingPresentation(remainingToday: [], summary: .idle, hudRows: [])
         }
-        let visibility = reminders.visibility(of: occurrences, at: now)
         let result = policy.presentation(for: visibility.occurrences, selectedCalendarIDs: state.selectedCalendarIDs, at: now)
         return MeetingPresentation(remainingToday: result.remainingToday, summary: result.summary,
                                    hudRows: isPaused ? [] : result.hudRows.filter { !visibility.suppressedCountdowns.contains($0.id) })

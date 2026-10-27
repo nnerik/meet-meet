@@ -169,6 +169,11 @@ publishing, packaging checks and distribution limitations.
 - `MenuBarState` gives pause priority over calendar status and meeting summaries;
   the dropdown still exposes the underlying status and meeting details. Menu
   entries include full-title tooltips/accessibility labels, calendar and times.
+  `CalendarSession.meetingMenu` captures phase, countdown boundary, hide choices
+  and suppression availability from the same reconciled time and occurrence
+  snapshot as the HUD. The native `MeetingMenuItem` only renders those decisions;
+  it never samples wall time. Click handlers still use fresh time rather than
+  treating a captured menu's availability as authorization to change a reminder.
 - `OnboardingSession` owns setup progress and persisted completion without
   requiring access or calendar selection. `LoginLaunchSession` reads a
   replaceable OS service adapter and serializes explicit registration changes;

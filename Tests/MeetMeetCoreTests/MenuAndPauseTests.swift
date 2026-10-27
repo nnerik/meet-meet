@@ -2,6 +2,9 @@ import Foundation
 import Synchronization
 import Testing
 @testable import MeetMeetCore
+#if !SWIFT_PACKAGE
+import AppKit
+#endif
 
 private let pauseTestNow = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -37,12 +40,16 @@ private let pauseEvent = MeetingOccurrence(id: "event", calendarID: "work", titl
 
 private actor PauseReader: CalendarReading {
     let permission: CalendarAccess
+    let events: [MeetingOccurrence]
     private(set) var fetches = 0
-    init(permission: CalendarAccess = .fullAccess) { self.permission = permission }
+    init(permission: CalendarAccess = .fullAccess, events: [MeetingOccurrence] = [pauseEvent]) {
+        self.permission = permission
+        self.events = events
+    }
     func access() -> CalendarAccess { permission }
     func requestAccess() -> CalendarAccess { permission }
     func calendars() -> [CalendarDescriptor] { [CalendarDescriptor(id: "work", title: "Work", sourceTitle: "Fixture")] }
-    func occurrences(in interval: DateInterval, calendarIDs: Set<String>) -> [MeetingOccurrence] { fetches += 1; return [pauseEvent] }
+    func occurrences(in interval: DateInterval, calendarIDs: Set<String>) -> [MeetingOccurrence] { fetches += 1; return events }
 }
 
 @MainActor
@@ -65,6 +72,7 @@ func pauseSuppressesHUDAndAudioInputButKeepsCalendarRefreshAndMenuDetails() asyn
     #expect(session.presentation.hudRows.isEmpty)
     #expect(session.reminderOccurrences.isEmpty)
     #expect(session.presentation.remainingToday == [pauseEvent])
+    #expect(session.meetingMenu.remainingToday.map(\.meeting) == [pauseEvent])
     #expect(state.pauseUntil == pauseCalendar().dateInterval(of: .day, for: pauseTestNow)?.end)
     await session.refresh()
     #expect(await reader.fetches == 2)
@@ -182,3 +190,213 @@ func idleAndCalendarStatusTextRemainDistinct() {
     #expect(MenuBarState.calendarIssue(.failed).text(titleLimit: 24, formatTime: { _ in "unused" }) == "Calendar refresh failed")
     #expect(MenuBarState.meetings(.upcoming(meetings: [pauseEvent], isTomorrow: false)).text(titleLimit: 8, formatTime: { _ in "14:00" }) == "14:00 Team mee…")
 }
+
+@Test(arguments: [
+    (-60.001, CountdownPhase.upcoming, true),
+    (-60.0, .upcoming, false),
+    (-59.999, .upcoming, false),
+    (-0.001, .upcoming, false),
+    (0.0, .ongoing, true),
+    (0.001, .ongoing, true),
+    (419.999, .ongoing, true),
+    (420.0, .ongoing, false),
+    (420.001, .ongoing, false),
+]) @MainActor
+func meetingMenuSharesPhaseAndFinalMinuteDecisionsWithHUD(offset: TimeInterval, phase: CountdownPhase, canSuppress: Bool) async throws {
+    let clock = PauseClock(now: pauseEvent.start.addingTimeInterval(offset))
+    let session = CalendarSession(reader: PauseReader(), state: try pauseState(), clock: clock, calendar: pauseCalendar)
+    await session.refresh()
+    let entry = try #require(session.meetingMenu.remainingToday.first)
+    let row = try #require(session.presentation.hudRows.first)
+    #expect(entry.phase == phase)
+    #expect(entry.boundary == (phase == .upcoming ? pauseEvent.start : pauseEvent.end))
+    #expect(entry.countdownAction == .suppress(isEnabled: canSuppress))
+    #expect(entry.phase == row.phase)
+    #expect(entry.boundary == row.boundary)
+    #expect(row.shouldPulse == !canSuppress)
+    #expect(entry.calendarTitle == "Work")
+    #expect(!entry.canHideOccurrence)
+    #expect(!entry.canHideSeries)
+}
+
+@Test(arguments: [CountdownPhase.upcoming, .ongoing], [-60.001, -60.0, -59.999]) @MainActor
+func meetingMenuRestoresSuppressedCountdownAtTheSameThresholdAsHUD(phase: CountdownPhase, offset: TimeInterval) async throws {
+    let state = try pauseState()
+    let boundary = phase == .upcoming ? pauseEvent.start : pauseEvent.end
+    try state.setCountdownSuppressions([CountdownSuppression(occurrence: pauseEvent.key, phase: phase, boundary: boundary)])
+    let session = CalendarSession(reader: PauseReader(), state: state, clock: PauseClock(now: boundary.addingTimeInterval(offset)), calendar: pauseCalendar)
+    await session.refresh()
+    let entry = try #require(session.meetingMenu.remainingToday.first)
+    let suppressed = offset < -60
+    #expect(entry.phase == phase)
+    #expect(entry.countdownAction == (suppressed ? .restore : .suppress(isEnabled: false)))
+    #expect(session.presentation.hudRows.isEmpty == suppressed)
+    #expect(session.reminderOccurrences == [pauseEvent])
+}
+
+@Test @MainActor
+func meetingMenuRemainsCoherentUntilSessionTimeIsReconciled() async throws {
+    let state = try pauseState()
+    try state.setCountdownSuppressions([CountdownSuppression(occurrence: pauseEvent.key, phase: .upcoming, boundary: pauseEvent.start)])
+    let clock = PauseClock(now: pauseEvent.start.addingTimeInterval(-60.001))
+    let session = CalendarSession(reader: PauseReader(), state: state, clock: clock, calendar: pauseCalendar)
+    await session.refresh()
+    let captured = session.meetingMenu
+    #expect(captured.remainingToday.first?.countdownAction == .restore)
+    clock.set(pauseEvent.start.addingTimeInterval(-59.999))
+    #expect(session.meetingMenu == captured)
+    #expect(session.presentation.hudRows.isEmpty)
+    session.tick()
+    #expect(session.meetingMenu.remainingToday.first?.countdownAction == .suppress(isEnabled: false))
+    #expect(session.presentation.hudRows.count == 1)
+
+    clock.set(pauseEvent.start.addingTimeInterval(-0.001))
+    session.tick()
+    await session.refresh()
+    let upcoming = session.meetingMenu
+    clock.set(pauseEvent.start)
+    #expect(session.meetingMenu == upcoming)
+    session.tick()
+    #expect(session.meetingMenu.remainingToday.first?.phase == .ongoing)
+    #expect(session.meetingMenu.remainingToday.first?.countdownAction == .suppress(isEnabled: true))
+    // A captured menu remains a value snapshot even after the session advances.
+    #expect(upcoming.remainingToday.first?.phase == .upcoming)
+    #expect(upcoming.remainingToday.first?.countdownAction == .suppress(isEnabled: false))
+}
+
+@Test @MainActor
+func meetingMenuKeepsPermanentHidingDistinctFromCountdownSuppression() async throws {
+    let state = try pauseState()
+    func meeting(_ id: String, recurring: Bool = false) -> MeetingOccurrence {
+        MeetingOccurrence(id: id, calendarID: "work", title: id, start: pauseEvent.start, end: pauseEvent.end,
+                          identityEvidence: EventIdentityEvidence(sourceID: "fixture", localItemID: id, externalItemID: nil,
+                                                                  eventID: id, originalOccurrenceDate: nil,
+                                                                  isRecurring: recurring, isDetached: false))
+    }
+    let occurrence = meeting("occurrence")
+    let series = meeting("series", recurring: true)
+    let suppressed = meeting("suppressed")
+    let visibleSeries = meeting("visible-series", recurring: true)
+    let events = [occurrence, series, suppressed, visibleSeries]
+    let session = CalendarSession(reader: PauseReader(events: events), state: state, clock: PauseClock(), calendar: pauseCalendar)
+    await session.refresh()
+    try session.reminders.hide(occurrence, scope: .occurrence, calendarTitle: "Work", in: events, at: session.now)
+    try session.reminders.hide(series, scope: .series, calendarTitle: "Work", in: events, at: session.now)
+    try session.reminders.suppressCountdown(suppressed, at: session.now)
+    let entries = session.meetingMenu.remainingToday
+    #expect(entries.map(\.meeting) == [suppressed, visibleSeries])
+    #expect(entries.first?.countdownAction == .restore)
+    #expect(entries.first?.canHideOccurrence == true)
+    #expect(entries.first?.canHideSeries == false)
+    #expect(entries.last?.canHideSeries == true)
+    #expect(session.presentation.hudRows.map(\.meeting) == [visibleSeries])
+    #expect(session.reminderOccurrences == [suppressed, visibleSeries])
+}
+
+@Test @MainActor
+func meetingMenuKeepsTomorrowLeadMeetingsAndClearsUnavailableOrEndedEntries() async throws {
+    let dayEnd = try #require(pauseCalendar().dateInterval(of: .day, for: pauseTestNow)?.end)
+    let now = dayEnd.addingTimeInterval(-120)
+    let tomorrow = MeetingOccurrence(id: "tomorrow", calendarID: "work", title: "Tomorrow", start: dayEnd.addingTimeInterval(60), end: dayEnd.addingTimeInterval(600))
+    let session = CalendarSession(reader: PauseReader(events: [tomorrow]), state: try pauseState(), clock: PauseClock(now: now), calendar: pauseCalendar)
+    await session.refresh()
+    #expect(session.meetingMenu.remainingToday.isEmpty)
+    #expect(session.meetingMenu.tomorrow.map(\.meeting) == [tomorrow])
+    #expect(session.meetingMenu.tomorrow.first?.countdownAction == .suppress(isEnabled: true))
+    session.invalidate()
+    #expect(session.meetingMenu.tomorrow.isEmpty)
+
+    let ended = CalendarSession(reader: PauseReader(), state: try pauseState(), clock: PauseClock(now: pauseEvent.end), calendar: pauseCalendar)
+    await ended.refresh()
+    #expect(ended.meetingMenu.remainingToday.isEmpty)
+    #expect(ended.meetingMenu.tomorrow.isEmpty)
+}
+
+#if !SWIFT_PACKAGE
+@Test @MainActor
+func nativeMeetingMenuRendersCapturedDecisionsAndDispatchesOccurrenceKeys() async throws {
+    let state = try pauseState()
+    let clock = PauseClock(now: pauseEvent.start.addingTimeInterval(-0.001))
+    let session = CalendarSession(reader: PauseReader(), state: state, clock: clock, calendar: pauseCalendar)
+    await session.refresh()
+    let entry = try #require(session.meetingMenu.remainingToday.first)
+    clock.set(pauseEvent.end.addingTimeInterval(1))
+    var dispatched: MeetingMenuItem.ReminderAction?
+    var key: OccurrenceKey?
+    let item = MeetingMenuItem(entry: entry, formatTime: { $0 == pauseEvent.start ? "START" : "END" }) { action, sender in
+        dispatched = action
+        key = sender.representedObject as? OccurrenceKey
+    }
+    #expect(item.title == "START  Team meeting")
+    #expect(item.accessibilityLabel()?.hasPrefix("Upcoming:") == true)
+    let submenu = try #require(item.submenu)
+    #expect(!submenu.autoenablesItems)
+    #expect(submenu.items.contains { $0.title == "Upcoming · Work" })
+    let suppress = try #require(submenu.items.first { $0.title == "Hide countdown until final minute" })
+    #expect(!suppress.isEnabled)
+    #expect(submenu.items.first { $0.title == "Hide this meeting" }?.isEnabled == false)
+    #expect(submenu.items.first { $0.title == "Hide this series" }?.isEnabled == false)
+
+    clock.set(pauseEvent.start)
+    session.tick()
+    let ongoing = try #require(session.meetingMenu.remainingToday.first)
+    let ongoingItem = MeetingMenuItem(entry: ongoing, formatTime: { _ in "END" }) { action, sender in
+        dispatched = action
+        key = sender.representedObject as? OccurrenceKey
+    }
+    #expect(ongoingItem.title == "Until END  Team meeting")
+    #expect(ongoingItem.accessibilityLabel()?.hasPrefix("Ongoing:") == true)
+    #expect(ongoingItem.submenu?.items.contains { $0.title == "Ongoing · Work" } == true)
+    let ongoingMenu = try #require(ongoingItem.submenu)
+    let ongoingSuppress = try #require(ongoingMenu.items.first { $0.title == "Hide countdown until final minute" })
+    #expect(ongoingSuppress.isEnabled)
+    ongoingMenu.performActionForItem(at: ongoingMenu.index(of: ongoingSuppress))
+    #expect(dispatched == .suppressCountdown)
+    #expect(key == pauseEvent.key)
+
+    try session.reminders.suppressCountdown(pauseEvent, at: session.now)
+    let restoredEntry = try #require(session.meetingMenu.remainingToday.first)
+    let restoreItem = MeetingMenuItem(entry: restoredEntry, formatTime: { _ in "END" }) { action, sender in
+        dispatched = action
+        key = sender.representedObject as? OccurrenceKey
+    }
+    let restoreMenu = try #require(restoreItem.submenu)
+    let restore = try #require(restoreMenu.items.first { $0.title == "Show countdown now" })
+    #expect(restore.isEnabled)
+    restoreMenu.performActionForItem(at: restoreMenu.index(of: restore))
+    #expect(dispatched == .restoreCountdown)
+    #expect(key == pauseEvent.key)
+}
+
+@Test @MainActor
+func nativeTomorrowMeetingMenuPreservesDetailsAndHideChoices() async throws {
+    let state = try pauseState()
+    let dayEnd = try #require(pauseCalendar().dateInterval(of: .day, for: pauseTestNow)?.end)
+    let event = MeetingOccurrence(id: "series", calendarID: "work", title: "Recurring meeting",
+                                  start: dayEnd.addingTimeInterval(60), end: dayEnd.addingTimeInterval(600),
+                                  identityEvidence: EventIdentityEvidence(sourceID: "fixture", localItemID: "series", externalItemID: nil,
+                                                                          eventID: "series", originalOccurrenceDate: nil,
+                                                                          isRecurring: true, isDetached: false),
+                                  location: "Meeting room", url: URL(string: "https://example.com/meeting"))
+    let session = CalendarSession(reader: PauseReader(events: [event]), state: state,
+                                  clock: PauseClock(now: dayEnd.addingTimeInterval(-120)), calendar: pauseCalendar)
+    await session.refresh()
+    let entry = try #require(session.meetingMenu.tomorrow.first)
+    var dispatched: [MeetingMenuItem.ReminderAction] = []
+    let item = MeetingMenuItem(entry: entry, isTomorrow: true, formatTime: { _ in "START" }) { action, sender in
+        dispatched.append(action)
+        #expect(sender.representedObject as? OccurrenceKey == event.key)
+    }
+    #expect(item.title == "Tomorrow START  Recurring meeting")
+    #expect(item.toolTip == event.title)
+    let submenu = try #require(item.submenu)
+    #expect(submenu.items.contains { $0.title == "Location: Meeting room" })
+    #expect(submenu.items.contains { $0.title == "https://example.com/meeting" })
+    for title in ["Hide this meeting", "Hide this series"] {
+        let action = try #require(submenu.items.first { $0.title == title })
+        #expect(action.isEnabled)
+        submenu.performActionForItem(at: submenu.index(of: action))
+    }
+    #expect(dispatched == [.hideOccurrence, .hideSeries])
+}
+#endif
