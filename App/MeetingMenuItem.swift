@@ -4,14 +4,10 @@ import MeetMeetCore
 /// Native rendering only: reminder decisions arrive in a reconciled entry.
 @MainActor
 final class MeetingMenuItem: NSMenuItem {
-    enum ReminderAction: Int {
-        case hideOccurrence, hideSeries, suppressCountdown, restoreCountdown
-    }
-
-    private let performAction: (ReminderAction, NSMenuItem) -> Void
+    private let performAction: (MeetingReminderAction, OccurrenceKey) -> Void
 
     init(entry: MeetingMenuEntry, isTomorrow: Bool = false, formatTime: (Date) -> String,
-         performAction: @escaping (ReminderAction, NSMenuItem) -> Void) {
+         performAction: @escaping (MeetingReminderAction, OccurrenceKey) -> Void) {
         self.performAction = performAction
         let event = entry.meeting
         let prefix = isTomorrow ? "Tomorrow " : entry.phase == .ongoing ? "Until " : ""
@@ -49,7 +45,7 @@ final class MeetingMenuItem: NSMenuItem {
         item.toolTip = title
     }
 
-    private func addAction(_ title: String, _ action: ReminderAction, enabled: Bool = true, key: OccurrenceKey, to menu: NSMenu) {
+    private func addAction(_ title: String, _ action: MeetingReminderAction, enabled: Bool = true, key: OccurrenceKey, to menu: NSMenu) {
         let item = menu.addItem(withTitle: title, action: #selector(dispatchReminderAction(_:)), keyEquivalent: "")
         item.target = self
         item.tag = action.rawValue
@@ -58,7 +54,8 @@ final class MeetingMenuItem: NSMenuItem {
     }
 
     @objc private func dispatchReminderAction(_ sender: NSMenuItem) {
-        guard let action = ReminderAction(rawValue: sender.tag) else { return }
-        performAction(action, sender)
+        guard let action = MeetingReminderAction(rawValue: sender.tag),
+              let key = sender.representedObject as? OccurrenceKey else { return }
+        performAction(action, key)
     }
 }

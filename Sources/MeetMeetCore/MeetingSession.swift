@@ -59,6 +59,14 @@ public final class MeetingSession {
         else { updateCues() }
     }
 
+    public func performReminderAction(_ action: MeetingReminderAction, for key: OccurrenceKey) throws {
+        guard running, !sleeping else { throw ReminderRuleError.calendarUnavailable }
+        try calendarSession.performReminderAction(action, for: key)
+        // Use the normal live reconciliation path after a successful change so
+        // menu, HUD and cues advance together, including clock/access safeguards.
+        tick()
+    }
+
     public func setSleeping(_ sleeping: Bool) {
         self.sleeping = sleeping
         audioCues.reset()

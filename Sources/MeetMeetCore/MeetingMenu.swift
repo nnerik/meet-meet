@@ -1,5 +1,9 @@
 import Foundation
 
+public enum MeetingReminderAction: Int, Sendable {
+    case hideOccurrence, hideSeries, suppressCountdown, restoreCountdown
+}
+
 public struct MeetingMenuPresentation: Equatable, Sendable {
     public let remainingToday: [MeetingMenuEntry]
     public let tomorrow: [MeetingMenuEntry]

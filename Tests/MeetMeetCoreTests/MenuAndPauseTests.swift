@@ -321,11 +321,11 @@ func nativeMeetingMenuRendersCapturedDecisionsAndDispatchesOccurrenceKeys() asyn
     await session.refresh()
     let entry = try #require(session.meetingMenu.remainingToday.first)
     clock.set(pauseEvent.end.addingTimeInterval(1))
-    var dispatched: MeetingMenuItem.ReminderAction?
+    var dispatched: MeetingReminderAction?
     var key: OccurrenceKey?
-    let item = MeetingMenuItem(entry: entry, formatTime: { $0 == pauseEvent.start ? "START" : "END" }) { action, sender in
+    let item = MeetingMenuItem(entry: entry, formatTime: { $0 == pauseEvent.start ? "START" : "END" }) { action, occurrence in
         dispatched = action
-        key = sender.representedObject as? OccurrenceKey
+        key = occurrence
     }
     #expect(item.title == "START  Team meeting")
     #expect(item.accessibilityLabel()?.hasPrefix("Upcoming:") == true)
@@ -340,9 +340,9 @@ func nativeMeetingMenuRendersCapturedDecisionsAndDispatchesOccurrenceKeys() asyn
     clock.set(pauseEvent.start)
     session.tick()
     let ongoing = try #require(session.meetingMenu.remainingToday.first)
-    let ongoingItem = MeetingMenuItem(entry: ongoing, formatTime: { _ in "END" }) { action, sender in
+    let ongoingItem = MeetingMenuItem(entry: ongoing, formatTime: { _ in "END" }) { action, occurrence in
         dispatched = action
-        key = sender.representedObject as? OccurrenceKey
+        key = occurrence
     }
     #expect(ongoingItem.title == "Until END  Team meeting")
     #expect(ongoingItem.accessibilityLabel()?.hasPrefix("Ongoing:") == true)
@@ -356,9 +356,9 @@ func nativeMeetingMenuRendersCapturedDecisionsAndDispatchesOccurrenceKeys() asyn
 
     try session.reminders.suppressCountdown(pauseEvent, at: session.now)
     let restoredEntry = try #require(session.meetingMenu.remainingToday.first)
-    let restoreItem = MeetingMenuItem(entry: restoredEntry, formatTime: { _ in "END" }) { action, sender in
+    let restoreItem = MeetingMenuItem(entry: restoredEntry, formatTime: { _ in "END" }) { action, occurrence in
         dispatched = action
-        key = sender.representedObject as? OccurrenceKey
+        key = occurrence
     }
     let restoreMenu = try #require(restoreItem.submenu)
     let restore = try #require(restoreMenu.items.first { $0.title == "Show countdown now" })
@@ -382,10 +382,10 @@ func nativeTomorrowMeetingMenuPreservesDetailsAndHideChoices() async throws {
                                   clock: PauseClock(now: dayEnd.addingTimeInterval(-120)), calendar: pauseCalendar)
     await session.refresh()
     let entry = try #require(session.meetingMenu.tomorrow.first)
-    var dispatched: [MeetingMenuItem.ReminderAction] = []
-    let item = MeetingMenuItem(entry: entry, isTomorrow: true, formatTime: { _ in "START" }) { action, sender in
+    var dispatched: [MeetingReminderAction] = []
+    let item = MeetingMenuItem(entry: entry, isTomorrow: true, formatTime: { _ in "START" }) { action, occurrence in
         dispatched.append(action)
-        #expect(sender.representedObject as? OccurrenceKey == event.key)
+        #expect(occurrence == event.key)
     }
     #expect(item.title == "Tomorrow START  Recurring meeting")
     #expect(item.toolTip == event.title)

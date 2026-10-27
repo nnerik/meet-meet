@@ -83,6 +83,32 @@ public final class CalendarSession {
                                    hudRows: isPaused ? [] : result.hudRows.filter { !visibility.suppressedCountdowns.contains($0.id) })
     }
 
+    /// Resolve a menu's key against current values, never its captured occurrence
+    /// or timestamp. Only the live meeting module exposes action dispatch.
+    func performReminderAction(_ action: MeetingReminderAction, for key: OccurrenceKey) throws {
+        guard status == .ready, !stopped else { throw ReminderRuleError.calendarUnavailable }
+        let current = clock.now
+        guard current.timeIntervalSinceReferenceDate.isFinite else { throw ReminderRuleError.invalidTime }
+        let matches = occurrences.filter { $0.key == key }
+        guard !matches.isEmpty else { throw ReminderRuleError.occurrenceUnavailable }
+        guard matches.count == 1 else { throw ReminderRuleError.ambiguousOccurrence }
+        let event = matches[0]
+        guard state.selectedCalendarIDs.contains(event.calendarID), event.isEligibleMeeting else {
+            throw ReminderRuleError.occurrenceUnavailable
+        }
+        guard event.end > current else { throw ReminderRuleError.eventEnded }
+        switch action {
+        case .hideOccurrence, .hideSeries:
+            let title = calendars.first { $0.id == event.calendarID }?.title ?? "Calendar"
+            try reminders.hide(event, scope: action == .hideOccurrence ? .occurrence : .series,
+                               calendarTitle: title, in: occurrences, at: current)
+        case .suppressCountdown:
+            try reminders.suppressCountdown(event, at: current)
+        case .restoreCountdown:
+            try reminders.restoreCountdown(key)
+        }
+    }
+
     public var isPaused: Bool { state.pauseUntil.map { $0 > now } ?? false }
 
     public var menuBarState: MenuBarState {

@@ -172,8 +172,12 @@ publishing, packaging checks and distribution limitations.
   `CalendarSession.meetingMenu` captures phase, countdown boundary, hide choices
   and suppression availability from the same reconciled time and occurrence
   snapshot as the HUD. The native `MeetingMenuItem` only renders those decisions;
-  it never samples wall time. Click handlers still use fresh time rather than
-  treating a captured menu's availability as authorization to change a reminder.
+  it never samples wall time. `MeetingSession.performReminderAction` resolves
+  an occurrence key against current calendar values and validates fresh clock
+  time, readiness, selection, eligibility and unique identity before any write.
+  A captured menu's availability never authorizes a reminder change. Successful
+  actions use the normal live reconciliation path; rejected actions leave
+  reminder state untouched and native error presentation remains in the delegate.
 - `OnboardingSession` owns setup progress and persisted completion without
   requiring access or calendar selection. `LoginLaunchSession` reads a
   replaceable OS service adapter and serializes explicit registration changes;

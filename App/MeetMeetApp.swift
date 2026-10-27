@@ -103,45 +103,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func addMeeting(_ entry: MeetingMenuEntry, isTomorrow: Bool = false, to menu: NSMenu) {
-        let item = MeetingMenuItem(entry: entry, isTomorrow: isTomorrow, formatTime: formattedTime) { [weak self] action, sender in
-            switch action {
-            case .hideOccurrence: self?.hideOccurrence(sender)
-            case .hideSeries: self?.hideSeries(sender)
-            case .suppressCountdown: self?.suppressCountdown(sender)
-            case .restoreCountdown: self?.restoreCountdown(sender)
-            }
+        let item = MeetingMenuItem(entry: entry, isTomorrow: isTomorrow, formatTime: formattedTime) { [weak self] action, key in
+            self?.performReminderAction(action, for: key)
         }
         menu.addItem(item)
     }
 
-    private func performReminderAction(_ sender: NSMenuItem, action: (MeetingOccurrence) throws -> Void) {
-        guard let key = sender.representedObject as? OccurrenceKey else { return }
-        let matches = session.occurrences.filter { $0.key == key }
+    private func performReminderAction(_ action: MeetingReminderAction, for key: OccurrenceKey) {
         do {
-            guard session.status == .ready, matches.count == 1 else { throw ReminderRuleError.ambiguousOccurrence }
-            try action(matches[0])
+            try live.performReminderAction(action, for: key)
             updateTitle()
         } catch {
             presentError(error, title: "Could not update reminders")
         }
-    }
-
-    @objc private func hideOccurrence(_ sender: NSMenuItem) { hide(sender, scope: .occurrence) }
-    @objc private func hideSeries(_ sender: NSMenuItem) { hide(sender, scope: .series) }
-
-    private func hide(_ sender: NSMenuItem, scope: HideScope) {
-        performReminderAction(sender) { event in
-            let title = session.calendars.first { $0.id == event.calendarID }?.title ?? "Calendar"
-            try session.reminders.hide(event, scope: scope, calendarTitle: title, in: session.occurrences, at: Date())
-        }
-    }
-
-    @objc private func suppressCountdown(_ sender: NSMenuItem) {
-        performReminderAction(sender) { try session.reminders.suppressCountdown($0, at: Date()) }
-    }
-
-    @objc private func restoreCountdown(_ sender: NSMenuItem) {
-        performReminderAction(sender) { try session.reminders.restoreCountdown($0.key) }
     }
 
     @objc private func manageHiddenEvents() {

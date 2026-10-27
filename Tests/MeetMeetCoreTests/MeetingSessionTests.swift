@@ -2,6 +2,9 @@ import Foundation
 import Synchronization
 import Testing
 @testable import MeetMeetCore
+#if !SWIFT_PACKAGE
+import AppKit
+#endif
 
 private let liveNow = Date(timeIntervalSince1970: 1_800_000_000)
 
@@ -20,8 +23,10 @@ private final class LiveClock: AppClock, Sendable {
 
 @MainActor private final class LiveStorage: LocalStateStoring {
     private var records: [String: Data] = [:]
+    private(set) var writes = 0
+    init(records: [String: Data] = [:]) { self.records = records }
     func data(forKey key: String) -> Data? { records[key] }
-    func set(_ data: Data?, forKey key: String) { records[key] = data }
+    func set(_ data: Data?, forKey key: String) { records[key] = data; writes += 1 }
 }
 
 @MainActor private final class LiveRefreshScheduler: CalendarRefreshScheduling {
@@ -418,3 +423,263 @@ private func liveMeeting(_ id: String = "one", start: TimeInterval, end: TimeInt
     #expect(player.sounds.isEmpty)
     #expect(live.presentation.hudRows.map(\.phase) == [.ongoing])
 }
+
+@Test(arguments: [CountdownPhase.upcoming, .ongoing], [-0.001, 0.0, 0.001]) @MainActor
+func reminderClicksRecheckTheFinalMinuteAfterTheMenuOpens(phase: CountdownPhase, offset: TimeInterval) async throws {
+    let storage = LiveStorage()
+    let state = try liveState(storage)
+    let event = liveMeeting(start: 120, end: 600)
+    let boundary = phase == .upcoming ? event.start : event.end
+    let clock = LiveClock(boundary.addingTimeInterval(-60.002))
+    let live = MeetingSession(reader: LiveCalendarReader([event]), state: state, player: LiveSoundPlayer(),
+                              clock: clock, calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    let entry = try #require(live.calendarSession.meetingMenu.remainingToday.first)
+    #expect(entry.countdownAction == .suppress(isEnabled: true))
+    let writes = storage.writes
+    clock.set(boundary.addingTimeInterval(-60 + offset))
+    if offset < 0 {
+        try live.performReminderAction(.suppressCountdown, for: entry.meeting.key)
+        #expect(state.countdownSuppressions.first?.phase == phase)
+        #expect(live.presentation.hudRows.isEmpty)
+        #expect(live.calendarSession.meetingMenu.remainingToday.first?.countdownAction == .restore)
+    } else {
+        #expect(throws: ReminderRuleError.finalMinute) {
+            try live.performReminderAction(.suppressCountdown, for: entry.meeting.key)
+        }
+        #expect(state.countdownSuppressions.isEmpty)
+        #expect(storage.writes == writes)
+    }
+}
+
+@Test @MainActor
+func reminderClickAfterStartUsesTheOngoingPhaseWithoutSuppressingSound() async throws {
+    let state = try liveState()
+    let event = liveMeeting(start: 1, end: 121)
+    let clock = LiveClock()
+    let player = LiveSoundPlayer()
+    let live = MeetingSession(reader: LiveCalendarReader([event]), state: state, player: player,
+                              clock: clock, calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    let entry = try #require(live.calendarSession.meetingMenu.remainingToday.first)
+    #expect(entry.phase == .upcoming)
+    clock.set(event.start)
+    try live.performReminderAction(.suppressCountdown, for: entry.meeting.key)
+    #expect(state.countdownSuppressions == [CountdownSuppression(occurrence: event.key, phase: .ongoing, boundary: event.end)])
+    #expect(live.calendarSession.now == event.start)
+    #expect(live.presentation.hudRows.isEmpty)
+    #expect(live.calendarSession.meetingMenu.remainingToday.first?.phase == .ongoing)
+    #expect(live.calendarSession.meetingMenu.remainingToday.first?.countdownAction == .restore)
+    #expect(player.sounds == ["meet-meet"])
+}
+
+@Test(arguments: [MeetingReminderAction.hideOccurrence, .hideSeries, .suppressCountdown, .restoreCountdown]) @MainActor
+func reminderClicksResolveEditedOccurrencesAndUpdateVisibleState(action: MeetingReminderAction) async throws {
+    let state = try liveState()
+    let original = liveMeeting(start: 120, end: 600)
+    let reader = LiveCalendarReader([original])
+    let live = MeetingSession(reader: reader, state: state, player: LiveSoundPlayer(),
+                              clock: LiveClock(), calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    let entry = try #require(live.calendarSession.meetingMenu.remainingToday.first)
+    let edited = MeetingOccurrence(id: original.id, calendarID: "work", title: "Edited meeting",
+                                   start: liveNow.addingTimeInterval(180), end: liveNow.addingTimeInterval(900),
+                                   identityEvidence: EventIdentityEvidence(sourceID: "fixture", localItemID: "edited-series", externalItemID: nil,
+                                                                           eventID: "edited", originalOccurrenceDate: nil,
+                                                                           isRecurring: true, isDetached: false))
+    await reader.setEvents([edited])
+    await live.refresh()
+    if action == .restoreCountdown { try live.performReminderAction(.suppressCountdown, for: edited.key) }
+    try live.performReminderAction(action, for: entry.meeting.key)
+    switch action {
+    case .hideOccurrence, .hideSeries:
+        #expect(live.presentation.remainingToday.isEmpty)
+        #expect(live.calendarSession.meetingMenu.remainingToday.isEmpty)
+        #expect(live.calendarSession.reminderOccurrences.isEmpty)
+        let rule = try #require(state.hiddenEvents.first)
+        #expect(rule.title == "Edited meeting")
+        #expect(rule.localItemID == "edited-series")
+        #expect(rule.calendarTitle == "Work")
+        #expect(rule.scope == (action == .hideOccurrence ? .occurrence : .series))
+    case .suppressCountdown:
+        #expect(live.presentation.hudRows.isEmpty)
+        #expect(live.presentation.remainingToday == [edited])
+        #expect(live.calendarSession.reminderOccurrences == [edited])
+        #expect(state.countdownSuppressions.first?.boundary == edited.start)
+    case .restoreCountdown:
+        #expect(state.countdownSuppressions.isEmpty)
+        #expect(live.presentation.hudRows.map(\.meeting) == [edited])
+        #expect(live.calendarSession.meetingMenu.remainingToday.first?.countdownAction == .suppress(isEnabled: true))
+    }
+}
+
+private enum StaleReminderSnapshot: CaseIterable {
+    case missing, ambiguous, deselected, ineligible, ended, refreshing, denied, failed, stopped, sleeping, invalidTime
+}
+
+@Test(arguments: [MeetingReminderAction.hideOccurrence, .hideSeries, .suppressCountdown, .restoreCountdown], StaleReminderSnapshot.allCases) @MainActor
+private func staleReminderClicksNeverWriteReminderState(action: MeetingReminderAction, snapshot: StaleReminderSnapshot) async throws {
+    let storage = LiveStorage()
+    let state = try liveState(storage)
+    let event = liveMeeting(start: 120, end: 600)
+    let other = liveMeeting("other", start: 240, end: 900)
+    try state.setCountdownSuppressions([CountdownSuppression(occurrence: event.key, phase: .upcoming, boundary: event.start),
+                                        CountdownSuppression(occurrence: other.key, phase: .upcoming, boundary: other.start)])
+    let reader = LiveCalendarReader([event, other])
+    let clock = LiveClock()
+    let live = MeetingSession(reader: reader, state: state, player: LiveSoundPlayer(),
+                              clock: clock, calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    let entry = try #require(live.calendarSession.meetingMenu.remainingToday.first { $0.meeting.key == event.key })
+    let expected: ReminderRuleError
+    switch snapshot {
+    case .missing:
+        await reader.setEvents([other])
+        await live.refresh()
+        expected = .occurrenceUnavailable
+    case .ambiguous:
+        await reader.setEvents([event, event, other])
+        await live.refresh()
+        expected = .ambiguousOccurrence
+    case .deselected:
+        try state.setSelectedCalendarIDs([])
+        expected = .occurrenceUnavailable
+    case .ineligible:
+        await reader.setEvents([MeetingOccurrence(id: event.id, calendarID: event.calendarID, title: event.title,
+                                                  start: event.start, end: event.end, isCancelled: true), other])
+        await live.refresh()
+        expected = .occurrenceUnavailable
+    case .ended:
+        clock.set(event.end)
+        expected = .eventEnded
+    case .refreshing:
+        live.invalidate()
+        expected = .calendarUnavailable
+    case .denied:
+        await reader.setPermission(.denied)
+        await live.refresh()
+        expected = .calendarUnavailable
+    case .failed:
+        await reader.setFailure(true)
+        await live.refresh()
+        expected = .calendarUnavailable
+    case .stopped:
+        live.stop()
+        expected = .calendarUnavailable
+    case .sleeping:
+        live.setSleeping(true)
+        expected = .calendarUnavailable
+    case .invalidTime:
+        clock.set(Date(timeIntervalSince1970: .nan))
+        expected = .invalidTime
+    }
+    let hidden = state.hiddenEvents
+    let suppressions = state.countdownSuppressions
+    let writes = storage.writes
+    #expect(throws: expected) { try live.performReminderAction(action, for: entry.meeting.key) }
+    #expect(state.hiddenEvents == hidden)
+    #expect(state.countdownSuppressions == suppressions)
+    #expect(storage.writes == writes)
+    #expect(!expected.localizedDescription.isEmpty)
+}
+
+@Test(arguments: [false, true]) @MainActor
+func restoreFromAnOldMenuRemainsValidAfterItsSuppressionExpires(paused: Bool) async throws {
+    let state = try liveState()
+    let event = liveMeeting(start: 61, end: 600)
+    let other = liveMeeting("other", start: 240, end: 900)
+    let clock = LiveClock()
+    let live = MeetingSession(reader: LiveCalendarReader([event, other]), state: state, player: LiveSoundPlayer(),
+                              clock: clock, calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    try live.performReminderAction(.suppressCountdown, for: event.key)
+    try live.performReminderAction(.suppressCountdown, for: other.key)
+    let menu = live.calendarSession.meetingMenu
+    #expect(menu.remainingToday.first?.countdownAction == .restore)
+    if paused { try live.calendarSession.pauseForToday() }
+    clock.set(liveNow.addingTimeInterval(1))
+    try live.performReminderAction(.restoreCountdown, for: event.key)
+    #expect(state.countdownSuppressions.map(\.occurrence) == [other.key])
+    #expect(live.calendarSession.meetingMenu.remainingToday.first?.countdownAction == .suppress(isEnabled: false))
+    #expect(live.calendarSession.isPaused == paused)
+    #expect(live.presentation.hudRows.isEmpty == paused)
+    // Restoring again is valid even though no suppression record remains.
+    try live.performReminderAction(.restoreCountdown, for: event.key)
+    #expect(state.countdownSuppressions.map(\.occurrence) == [other.key])
+}
+
+@Test(arguments: [MeetingReminderAction.hideOccurrence, .hideSeries, .suppressCountdown, .restoreCountdown]) @MainActor
+func reminderClicksPropagateProtectedRecordErrorsWithoutPartialUpdates(action: MeetingReminderAction) async throws {
+    let record: AppStateRecord = action == .hideOccurrence || action == .hideSeries ? .hiddenEvents : .countdownSuppressions
+    let protected = Data(#"{"version":99,"value":[]}"#.utf8)
+    let storage = LiveStorage(records: [record.storageKey: protected])
+    let state = try liveState(storage)
+    let event = MeetingOccurrence(id: "series", calendarID: "work", title: "Series", start: liveNow.addingTimeInterval(120), end: liveNow.addingTimeInterval(600),
+                                  identityEvidence: EventIdentityEvidence(sourceID: "fixture", localItemID: "series", externalItemID: nil,
+                                                                          eventID: "series", originalOccurrenceDate: nil,
+                                                                          isRecurring: true, isDetached: false))
+    let live = MeetingSession(reader: LiveCalendarReader([event]), state: state, player: LiveSoundPlayer(),
+                              clock: LiveClock(), calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    let writes = storage.writes
+    #expect(throws: AppStateError.newerRecord(record)) { try live.performReminderAction(action, for: event.key) }
+    #expect(state.hiddenEvents.isEmpty)
+    #expect(state.countdownSuppressions.isEmpty)
+    #expect(storage.writes == writes)
+    #expect(storage.data(forKey: record.storageKey) == protected)
+}
+
+#if !SWIFT_PACKAGE
+@Test @MainActor
+func nativeReminderDispatchRechecksAStaleMenuAndReturnsItsErrorForPresentation() async throws {
+    let state = try liveState()
+    let event = liveMeeting(start: 61, end: 600)
+    let clock = LiveClock()
+    let live = MeetingSession(reader: LiveCalendarReader([event]), state: state, player: LiveSoundPlayer(),
+                              clock: clock, calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    let entry = try #require(live.calendarSession.meetingMenu.remainingToday.first)
+    var reportedError: (any Error)?
+    var successes = 0
+    let item = MeetingMenuItem(entry: entry, formatTime: { _ in "START" }) { action, key in
+        do {
+            try live.performReminderAction(action, for: key)
+            successes += 1
+        } catch { reportedError = error }
+    }
+    let menu = try #require(item.submenu)
+    let index = try #require(menu.items.firstIndex { $0.title == "Hide countdown until final minute" })
+    #expect(menu.items[index].isEnabled)
+    let selector = try #require(menu.items[index].action)
+    // Exercise the real native target/action without invoking NSMenu's global
+    // tracking machinery alongside the suite's synthetic window-hover tests.
+    let application = NSApplication.shared
+    clock.set(liveNow.addingTimeInterval(1))
+    #expect(application.sendAction(selector, to: menu.items[index].target, from: menu.items[index]))
+    #expect(successes == 0)
+    #expect(reportedError as? ReminderRuleError == .finalMinute)
+    #expect(reportedError?.localizedDescription == ReminderRuleError.finalMinute.localizedDescription)
+    #expect(state.countdownSuppressions.isEmpty)
+
+    // The old enabled item can still dispatch, but current data is authoritative.
+    clock.set(liveNow)
+    #expect(application.sendAction(selector, to: menu.items[index].target, from: menu.items[index]))
+    #expect(successes == 1)
+    #expect(live.presentation.hudRows.isEmpty)
+    #expect(live.calendarSession.meetingMenu.remainingToday.first?.countdownAction == .restore)
+}
+#endif

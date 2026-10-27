@@ -116,6 +116,7 @@ public enum ReminderVisibilityPolicy {
 
 public enum ReminderRuleError: Error, LocalizedError, Equatable {
     case identityUnavailable, notRecurring, seriesUnavailable, ambiguousOccurrence, finalMinute, eventEnded
+    case calendarUnavailable, occurrenceUnavailable, invalidTime
 
     public var errorDescription: String? {
         switch self {
@@ -125,6 +126,9 @@ public enum ReminderRuleError: Error, LocalizedError, Equatable {
         case .ambiguousOccurrence: "Calendar identity is ambiguous. The meeting was left visible."
         case .finalMinute: "The countdown is already in its final minute."
         case .eventEnded: "This meeting has already ended."
+        case .calendarUnavailable: "Calendar information is not ready. Refresh calendars and try again."
+        case .occurrenceUnavailable: "This meeting is no longer available. Refresh calendars and try again."
+        case .invalidTime: "The current time is unavailable. Try again when the system clock is available."
         }
     }
 }
