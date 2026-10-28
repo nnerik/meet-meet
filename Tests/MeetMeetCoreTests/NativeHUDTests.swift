@@ -418,7 +418,8 @@ func nativeHUDExposesMeetingRowsInTheApplicationAccessibilityTree() async throws
                                               eventNumber: 0, clickCount: 0, pressure: 0))
     window.contentView?.mouseExited(with: exit)
     try await Task.sleep(for: .milliseconds(3_100))
-    #expect(window.frame.width < expandedWidth)
+    // A busy native suite can delay the presentation timer past the reveal deadline.
+    #expect(await waitForHUD { window.frame.width < expandedWidth })
     #expect(hudAccessibilityDescriptions(from: application).contains("Native HUD fixture 1"))
     #expect(hudAccessibilityDescriptions(from: window).contains("Native HUD fixture 1"))
     #expect(hudAccessibilityDescriptions(from: window).contains("Starts in 2 minutes"))
@@ -428,7 +429,7 @@ func nativeHUDExposesMeetingRowsInTheApplicationAccessibilityTree() async throws
     #expect(!window.canBecomeKey)
 }
 @Test @MainActor
-func nativeSplashIsCenteredPassiveThemeAwareAndDismissable() async throws {
+func nativeSplashIsCenteredPassiveAppearanceIndependentAndDismissable() async throws {
     let application = NSApplication.shared
     let screen = try #require(NSScreen.screens.first)
     let state = AppState(storage: NativeHUDMemoryStore())
@@ -446,7 +447,8 @@ func nativeSplashIsCenteredPassiveThemeAwareAndDismissable() async throws {
     #expect(!window.isVisible)
     let now = Date()
     let meeting = MeetingOccurrence(id: "splash", calendarID: "fixture", title: "Splash fixture",
-                                    start: now.addingTimeInterval(30), end: now.addingTimeInterval(600))
+                                    start: now.addingTimeInterval(30), end: now.addingTimeInterval(600),
+                                    location: "Room 42", url: URL(string: "https://meet.google.com/abc-defg-hij"))
     cues.update(occurrences: [meeting], isActive: true, at: now)
     #expect(await waitForHUD { window.isVisible })
     #expect(application.keyWindow === previousKey)
@@ -459,15 +461,20 @@ func nativeSplashIsCenteredPassiveThemeAwareAndDismissable() async throws {
     #expect(abs(window.frame.midX - screen.visibleFrame.midX) <= pixel)
     #expect(abs(window.frame.midY - screen.visibleFrame.midY) <= pixel)
     #expect(screen.visibleFrame.contains(window.frame))
-    #expect(abs(window.frame.width - window.frame.height * 1.5) <= 2.5 * pixel)
     let content = try #require(window.contentView)
-    let image = try #require(content.subviews.compactMap { $0 as? NSImageView }.first)
-    #expect(content.hitTest(NSPoint(x: content.bounds.midX, y: content.bounds.midY)) === content)
+    func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+    let views = descendants(content)
+    let image = try #require(views.compactMap { $0 as? NSImageView }.first)
+    #expect(views.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Splash fixture" })
+    #expect(views.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Room 42" })
+    #expect(views.compactMap { $0 as? NSButton }.contains { $0.title == "Open meeting" })
+    #expect(image.frame.height > 100)
+    #expect(window.frame.height > image.frame.height)
     window.appearance = NSAppearance(named: .aqua)
-    #expect(await waitForHUD { image.identifier?.rawValue == "billboard-light-mode" })
+    #expect(await waitForHUD { image.identifier?.rawValue == "meet-meet" })
     #expect(image.image != nil)
     window.appearance = NSAppearance(named: .darkAqua)
-    #expect(await waitForHUD { image.identifier?.rawValue == "billboard-dark-mode" })
+    #expect(await waitForHUD { image.identifier?.rawValue == "meet-meet" })
     #expect(image.image != nil)
     let close = try #require(content.subviews.compactMap { $0 as? NSButton }.first)
     close.performClick(nil)
@@ -493,5 +500,31 @@ func nativeSplashIsCenteredPassiveThemeAwareAndDismissable() async throws {
     #expect(await waitForHUD { window.isVisible })
     cues.update(occurrences: [final], isActive: true, at: final.start)
     #expect(await waitForHUD { !window.isVisible })
+    cues.update(occurrences: [meeting], isActive: true, at: meeting.end.addingTimeInterval(-120))
+    #expect(await waitForHUD { window.isVisible })
+    let endViews = descendants(content)
+    #expect(endViews.compactMap { $0 as? NSImageView }.first?.identifier?.rawValue == "wrap-wrap")
+    #expect(endViews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Splash fixture" })
+    #expect(!endViews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Room 42" })
+    #expect(!endViews.compactMap { $0 as? NSButton }.contains { $0.title == "Open meeting" })
+    cues.update(occurrences: [meeting], isActive: true, at: meeting.end)
+    #expect(await waitForHUD { !window.isVisible })
+
+    let next = MeetingOccurrence(id: "overlapping", calendarID: "fixture", title: "Next meeting",
+                                 start: meeting.end.addingTimeInterval(-90), end: meeting.end.addingTimeInterval(600))
+    cues.update(occurrences: [meeting, next], isActive: true, at: meeting.end.addingTimeInterval(-120))
+    #expect(await waitForHUD { window.isVisible })
+    let combined = descendants(content)
+    #expect(Set(combined.compactMap { ($0 as? NSImageView)?.identifier?.rawValue }) == ["meet-meet", "wrap-wrap"])
+    let scroll = try #require(combined.compactMap { $0 as? NSScrollView }.first)
+    let document = try #require(scroll.documentView)
+    let imageHeight = combined.compactMap { ($0 as? NSImageView)?.frame.height }.reduce(0, +)
+    #expect(document.frame.height > imageHeight)
+    #expect(scroll.contentSize.height > 0)
+    #expect(abs(document.frame.width - window.frame.width) <= pixel)
+    #expect(screen.visibleFrame.contains(window.frame))
+    close.performClick(nil)
+    #expect(state.dismissedSplashCues.contains(next.key))
+    #expect(state.dismissedEndSplashCues.contains(meeting.key))
 }
 #endif

@@ -122,6 +122,8 @@ private func splashMeeting(_ id: String = "one", startsIn: TimeInterval = 60, ca
     let old = try JSONDecoder().decode(AppPreferences.self, from: Data(#"{"hudLeadMinutes":0}"#.utf8))
     #expect(old.splashCueEnabled)
     #expect(old.splashLeadMinutes == 1)
+    #expect(old.endSplashCueEnabled)
+    #expect(old.endSplashLeadMinutes == 2)
     #expect(old.calendarFetchHorizonMinutes == 1)
     var preferences = old
     preferences.splashLeadMinutes = 60
@@ -132,4 +134,83 @@ private func splashMeeting(_ id: String = "one", startsIn: TimeInterval = 60, ca
     #expect(malformed.splashLeadMinutes == 1)
     #expect(malformed.splashCueEnabled)
     #expect(malformed.menuTitleLimit == 40)
+}
+
+@Test @MainActor func endSplashCatchesUpOnlyDuringOngoingPhaseAndHidesAtEnd() throws {
+    let state = try splashState()
+    let session = SplashCueSession(state: state)
+    let event = splashMeeting(startsIn: -480) // Ends in two minutes.
+    session.update(occurrences: [event], isActive: true, at: splashNow.addingTimeInterval(-0.001))
+    #expect(session.endMeetings.isEmpty)
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    #expect(session.endMeetings == [event])
+    #expect(session.meetings.isEmpty)
+    session.reset()
+    session.update(occurrences: [event], isActive: true, at: splashNow.addingTimeInterval(90))
+    #expect(session.endMeetings == [event])
+    session.update(occurrences: [event], isActive: true, at: event.end)
+    #expect(session.endMeetings.isEmpty)
+
+    let short = MeetingOccurrence(id: "short", calendarID: "work", title: "Short",
+                                  start: splashNow.addingTimeInterval(30), end: splashNow.addingTimeInterval(60))
+    session.update(occurrences: [short], isActive: true, at: splashNow)
+    #expect(session.endMeetings.isEmpty)
+    session.update(occurrences: [short], isActive: true, at: short.start)
+    #expect(session.endMeetings == [short])
+    try state.updatePreferences { $0.endSplashCueEnabled = false }
+    session.update(occurrences: [short], isActive: true, at: short.start)
+    #expect(session.endMeetings.isEmpty)
+}
+
+@Test @MainActor func startDismissalDoesNotSuppressEndAndBothPersistIndependently() throws {
+    let store = SplashStorage()
+    let state = try splashState(store)
+    let event = splashMeeting()
+    let session = SplashCueSession(state: state)
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    session.dismiss()
+    let restored = SplashCueSession(state: AppState(storage: store))
+    restored.update(occurrences: [event], isActive: true, at: event.end.addingTimeInterval(-120))
+    #expect(restored.endMeetings == [event])
+    restored.dismiss()
+    let again = SplashCueSession(state: AppState(storage: store))
+    again.update(occurrences: [event], isActive: true, at: event.end.addingTimeInterval(-60))
+    #expect(again.endMeetings.isEmpty)
+    #expect(AppState(storage: store).dismissedEndSplashCues == [event.key])
+}
+
+@Test @MainActor func overlappingStartAndEndVisualsDismissTogetherAndRespectSafetyFilters() throws {
+    let store = SplashStorage()
+    let state = try splashState(store)
+    let session = SplashCueSession(state: state)
+    let upcoming = splashMeeting("upcoming")
+    let ongoing = splashMeeting("ongoing", startsIn: -500)
+    session.update(occurrences: [upcoming, ongoing], isActive: true, at: splashNow)
+    #expect(session.meetings == [upcoming])
+    #expect(session.endMeetings == [ongoing])
+    session.update(occurrences: [upcoming, ongoing], isActive: false, at: splashNow)
+    #expect(session.meetings.isEmpty && session.endMeetings.isEmpty)
+    session.update(occurrences: [ongoing, ongoing], isActive: true, at: splashNow)
+    #expect(session.endMeetings.isEmpty)
+    session.update(occurrences: [upcoming, ongoing], isActive: true, at: splashNow)
+    session.dismiss()
+    #expect(state.dismissedSplashCues == [upcoming.key])
+    #expect(state.dismissedEndSplashCues == [ongoing.key])
+    store.records[AppStateRecord.dismissedEndSplashCues.storageKey] = Data("invalid".utf8)
+    let unsafe = SplashCueSession(state: AppState(storage: store))
+    unsafe.update(occurrences: [splashMeeting("next"), ongoing], isActive: true, at: splashNow)
+    #expect(unsafe.meetings.isEmpty && unsafe.endMeetings.isEmpty)
+    #expect(unsafe.errorMessage != nil)
+}
+
+@Test func meetingLinksResolveExplicitURLsLocationsAndConferenceNotesSafely() {
+    let meet = URL(string: "https://meet.google.com/abc-defg-hij")!
+    #expect(MeetingLink.resolve(url: meet, location: "Room 2") == meet)
+    #expect(MeetingLink.resolve(url: nil, location: "Join: \(meet.absoluteString)") == meet)
+    #expect(MeetingLink.resolve(url: nil, location: "Room 2", notes: "Agenda https://example.com then join \(meet.absoluteString)") == meet)
+    #expect(MeetingLink.resolve(url: URL(string: "https://calendar.google.com/event"), location: "Room 2", notes: meet.absoluteString) == meet)
+    #expect(MeetingLink.resolve(url: nil, location: nil, notes: "https://meet.google.com.evil.test/join") == nil)
+    #expect(MeetingLink.resolve(url: URL(string: "file:///etc/passwd"), location: nil) == nil)
+    #expect(MeetingLink.resolve(url: URL(string: "javascript:alert(1)"), location: nil) == nil)
+    #expect(MeetingLink.resolve(url: URL(string: "zoommtg://zoom.us/join?confno=123"), location: nil) != nil)
 }

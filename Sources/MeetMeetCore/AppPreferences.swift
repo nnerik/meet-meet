@@ -18,6 +18,11 @@ public struct AppPreferences: Codable, Equatable, Sendable {
     public var menuTitleLimit = 24
     public var splashCueEnabled = true
     public var splashLeadMinutes = 1
+    public var endSplashCueEnabled = true
+    public var endSplashLeadMinutes = 2
+    /// Nil uses the bundled artwork. Custom names refer to app-owned imports.
+    public var startSplashImage: String?
+    public var endSplashImage: String?
     public var startCue = AudioCuePreference(soundName: "meet-meet", offsetMinutes: 1)
     public var endCue = AudioCuePreference(soundName: "wrap-wrap", offsetMinutes: 2)
     public var audioVolume = 1.0
@@ -34,6 +39,7 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         guard (0...60).contains(secondsThresholdMinutes) else { throw PreferenceError.secondsThresholdMinutes }
         guard (8...80).contains(menuTitleLimit) else { throw PreferenceError.menuTitleLimit }
         guard (1...60).contains(splashLeadMinutes) else { throw PreferenceError.splashLeadMinutes }
+        guard (1...60).contains(endSplashLeadMinutes) else { throw PreferenceError.splashLeadMinutes }
         guard (0...60).contains(startCue.offsetMinutes) else { throw PreferenceError.startOffset }
         guard (0...60).contains(endCue.offsetMinutes) else { throw PreferenceError.endOffset }
         guard !startCue.soundName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -44,6 +50,7 @@ public struct AppPreferences: Codable, Equatable, Sendable {
 
     private enum CodingKeys: String, CodingKey {
         case hudLeadMinutes, secondsThresholdMinutes, menuTitleLimit, splashCueEnabled, splashLeadMinutes, startCue, endCue, audioVolume
+        case endSplashCueEnabled, endSplashLeadMinutes, startSplashImage, endSplashImage
     }
 
     /// Recover individual malformed fields without discarding valid sibling preferences.
@@ -55,6 +62,10 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         if let value = try? values.decode(Int.self, forKey: .menuTitleLimit), (8...80).contains(value) { menuTitleLimit = value }
         if let value = try? values.decode(Bool.self, forKey: .splashCueEnabled) { splashCueEnabled = value }
         if let value = try? values.decode(Int.self, forKey: .splashLeadMinutes), (1...60).contains(value) { splashLeadMinutes = value }
+        if let value = try? values.decode(Bool.self, forKey: .endSplashCueEnabled) { endSplashCueEnabled = value }
+        if let value = try? values.decode(Int.self, forKey: .endSplashLeadMinutes), (1...60).contains(value) { endSplashLeadMinutes = value }
+        startSplashImage = try? values.decode(String.self, forKey: .startSplashImage)
+        endSplashImage = try? values.decode(String.self, forKey: .endSplashImage)
         if let value = try? values.decode(Double.self, forKey: .audioVolume), value.isFinite, (0...1).contains(value) { audioVolume = value }
         startCue = Self.decodeCue(from: values, key: .startCue, fallback: startCue)
         endCue = Self.decodeCue(from: values, key: .endCue, fallback: endCue)
@@ -82,7 +93,7 @@ public enum PreferenceError: Error, LocalizedError, Equatable {
         case .menuTitleLimit: "Menu title length must be between 8 and 80 characters."
         case .splashLeadMinutes: "Splash lead time must be between 1 and 60 minutes."
         case .startOffset, .endOffset: "Audio offsets must be between 0 and 60 minutes."
-        case .soundName: "Choose a bundled or system sound for each cue."
+        case .soundName: "Choose a bundled, system or imported sound for each cue."
         case .audioVolume: "Audio volume must be between 0 and 1."
         }
     }

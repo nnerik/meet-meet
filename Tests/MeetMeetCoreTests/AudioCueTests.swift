@@ -32,6 +32,25 @@ import AppKit
         #expect(throws: (any Error).self) { try player.play(named: "Glass", volume: volume) }
     }
 }
+
+@Test @MainActor func nativeCueImportsCopyValidateAndRejectPathsOutsideManagedMedia() throws {
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let bundle = Bundle(for: SystemSoundPlayer.self)
+    let audio = try #require(bundle.url(forResource: "meet-meet", withExtension: "mp3"))
+    let imported = try CueMedia.importFile(audio, audio: true, directory: directory)
+    let copy = try #require(CueMedia.url(for: imported, directory: directory))
+    #expect(try Data(contentsOf: copy) == Data(contentsOf: audio))
+    #expect(CueMedia.label(for: imported) == "meet-meet.mp3")
+    let image = try #require(bundle.url(forResource: "wrap-wrap", withExtension: "png"))
+    let importedImage = try CueMedia.importFile(image, audio: false, directory: directory)
+    #expect(NSImage(contentsOf: try #require(CueMedia.url(for: importedImage, directory: directory))) != nil)
+    #expect(throws: (any Error).self) { try CueMedia.importFile(image, audio: true, directory: directory) }
+    #expect(throws: (any Error).self) { try CueMedia.importFile(audio, audio: false, directory: directory) }
+    for name in ["imported:../Glass", "imported:/etc/passwd", "imported:\(UUID().uuidString)-../file", "imported:unknown", "/etc/passwd"] {
+        #expect(CueMedia.url(for: name, directory: directory) == nil)
+    }
+}
 #endif
 
 @Test func audioBundledDefaultsPreservePreviouslySavedSystemChoices() throws {

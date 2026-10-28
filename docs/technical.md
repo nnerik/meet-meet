@@ -12,7 +12,7 @@ bundled media are available under the [MIT License](../LICENSE).
 ## Current status
 
 The app currently has a sandboxed agent foundation, persistent calendar menu,
-editable General/Audio preferences, versioned local state and testable core
+editable General/Cues preferences, versioned local state and testable core
 boundaries. Deterministic policies now cover event eligibility, menu selection,
 countdown rows, formatting, ordering and pulse thresholds. Read-only EventKit
 access, explicit calendar selection and live menu summaries are now connected.
@@ -51,18 +51,24 @@ best-effort where macOS permits, never a reason to switch Spaces or take focus.
 No stack is shown without an eligible ongoing meeting or upcoming meeting inside
 the configured lead time.
 
-**Settings → General → Final splash cue** controls an image-only reminder in the
-center of the primary display, enabled by default one minute before start
-(configurable from 1–60 minutes). It uses the bundled light/dark artwork to match
-the system theme. Close it with **×**, or click the image then press **Escape**;
-it does not take keyboard focus when it appears. It disappears when the meeting
-starts. Manual dismissals survive restart, and simultaneous reminders share one
-splash. Launching or waking inside the lead interval shows a still-upcoming
-meeting's cue. Pause and hidden meetings suppress it; temporary countdown hiding
-and the regular HUD's lead time do not affect it.
+**Settings → Cues** groups audio and visual reminders into before-start and
+before-end sections. Visual cues default on one minute before start and two
+minutes before end (each configurable from 1–60 minutes), centered on the primary
+display. Default artwork is `meet-meet.png` for start and `wrap-wrap.png` for end,
+independent of system appearance; each can be replaced with an imported image.
+Start cues include the title, available location and an **Open meeting** button
+for an available link, opened in its default app. Conferencing links in event
+locations and notes are recognized, including Google Meet. End cues show only the
+title. Close with **×**, or click the artwork then press **Escape**; presentation
+does not take keyboard focus. Each cue disappears at its phase boundary. Manual
+dismissals survive restart independently for start and end. Overlapping reminders
+share one scrollable panel without losing meeting details. Launch/wake/resume
+catches up inside either visual cue interval, but end visuals never appear before
+the meeting starts. Pause and hidden meetings suppress both; temporary countdown
+hiding and the regular HUD's lead time do not affect them.
 
-**Settings → Audio** offers independent start/end cues (both off by default),
-bundled or system-sound selection, Preview and app-local volume. The bundled
+The same **Cues** tab offers independent start/end audio cues (both off by default),
+bundled, system or imported sound selection, Preview and app-local volume. The bundled
 `media/meet-meet.mp3` and `media/wrap-wrap.mp3` are the start/end defaults for new
 settings; existing saved sound choices are preserved. Xcode copies these files
 into the app bundle, so playback does not depend on the source folder at runtime.
@@ -72,9 +78,12 @@ Only future cues are armed after startup, wake, pause, access loss or settings
 changes. Coincident cues play once (start wins), with all receipts persisted
 before playback. Handled cues do not replay after rescheduling or clock reversal.
 Unreadable safety records disable automatic sounds rather than risking repeats;
-Preview remains available. Playback errors appear in Audio settings. Playback is
+Preview remains available. Playback errors appear in Cues settings. Playback is
 best-effort while the app runs; mute/output changes and sleep may prevent sound.
-No user-file import is supported and system volume is never changed.
+Imported audio and images are validated and copied into the sandbox's Application
+Support/MeetMeet/CueMedia directory, so the originals need not remain accessible.
+Import uses user-selected read-only access; no permanent external-file access or
+security-scoped bookmark is needed. System volume is never changed.
 Scheduled cues also wiggle each corresponding visible HUD icon five times with
 a one-second pause between repeats, unless Reduce Motion is enabled. This never
 reveals a hidden countdown or retains an ended meeting. Preview does not animate

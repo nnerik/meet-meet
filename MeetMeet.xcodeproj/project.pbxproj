@@ -47,8 +47,8 @@
 /* Begin PBXFileReference section */
         D20000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/MeetingMenuItem.swift; sourceTree = "<group>"; };
         C20000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/SplashHUDController.swift; sourceTree = "<group>"; };
-        C20000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = image.png; path = media/billboard-light-mode.png; sourceTree = "<group>"; };
-        C20000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = image.png; path = media/billboard-dark-mode.png; sourceTree = "<group>"; };
+        C20000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = image.png; path = media/meet-meet.png; sourceTree = "<group>"; };
+        C20000000000000000000003 = {isa = PBXFileReference; lastKnownFileType = image.png; path = media/wrap-wrap.png; sourceTree = "<group>"; };
         C20000000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Tests/MeetMeetCoreTests/SplashCueTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000001 = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = App/MeetMeetApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000002 = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = App/Info.plist; sourceTree = "<group>"; };

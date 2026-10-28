@@ -239,7 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 }
 
-private enum SettingsTab: Hashable { case general, calendars, audio, hiddenEvents }
+private enum SettingsTab: Hashable { case general, calendars, cues, hiddenEvents }
 
 @MainActor @Observable
 private final class SettingsNavigation { var tab = SettingsTab.general }
@@ -255,6 +255,7 @@ private struct SettingsView: View {
     @Bindable var navigation: SettingsNavigation
     @State private var errorMessage: String?
     @State private var confirmUnhideAll = false
+    @State private var previewEnd: Bool?
 
     var body: some View {
         if setup.isPresented {
@@ -285,12 +286,15 @@ private struct SettingsView: View {
             TabView(selection: $navigation.tab) {
                 Tab("General", systemImage: "gearshape", value: SettingsTab.general) { general }
                 Tab("Calendars", systemImage: "calendar", value: SettingsTab.calendars) { CalendarSettingsView(state: state, session: session) }
-                Tab("Audio", systemImage: "speaker.wave.2", value: SettingsTab.audio) { audio }
+                Tab("Cues", systemImage: "bell.badge", value: SettingsTab.cues) { cues }
                 Tab("Hidden Events", systemImage: "eye.slash", value: SettingsTab.hiddenEvents) { hiddenEvents }
             }
         }
         .frame(width: 580, height: 460)
-        .alert("Could not save settings", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
+        .sheet(isPresented: Binding(get: { previewEnd != nil }, set: { if !$0 { previewEnd = nil } })) {
+            visualPreview(isEnd: previewEnd ?? false)
+        }
+        .alert("Could not update settings", isPresented: Binding(get: { errorMessage != nil }, set: { if !$0 { errorMessage = nil } })) {
             Button("OK") { errorMessage = nil }
         } message: { Text(errorMessage ?? "") }
     }
@@ -302,13 +306,6 @@ private struct SettingsView: View {
                 Text("Zero shows ongoing countdowns only.").font(.caption).foregroundStyle(.secondary)
                 IntegerSettingField("Show seconds below", value: preference(\.secondsThresholdMinutes), range: 0...60, unit: "minutes")
                 Text("Zero disables seconds.").font(.caption).foregroundStyle(.secondary)
-            }
-            Section("Final splash cue") {
-                Toggle("Show splash before meetings", isOn: preference(\.splashCueEnabled))
-                IntegerSettingField("Before start", value: preference(\.splashLeadMinutes), range: 1...60, unit: "minutes")
-                    .disabled(!state.preferences.splashCueEnabled)
-                Text("Appears on the primary display until dismissed or the meeting starts. Close it with ×, or click the image then press Escape. Does not interrupt typing.")
-                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Menu bar") {
                 IntegerSettingField("Title length", value: preference(\.menuTitleLimit), range: 8...80, unit: "characters")
@@ -325,27 +322,15 @@ private struct SettingsView: View {
         .formStyle(.grouped)
     }
 
-    private var audio: some View {
+    private var cues: some View {
         Form {
-            Section("Before start") {
-                Toggle("Enable start cue", isOn: preference(\.startCue.isEnabled))
-                Picker("Sound", selection: preference(\.startCue.soundName)) {
-                    ForEach(soundNames, id: \.self) { Text($0).tag($0) }
-                }
-                IntegerSettingField("Before start", value: preference(\.startCue.offsetMinutes), range: 0...60, unit: "minutes")
-                Button("Preview start sound") { audioCues.preview(named: state.preferences.startCue.soundName) }
-            }
-            Section("Before end") {
-                Toggle("Enable end cue", isOn: preference(\.endCue.isEnabled))
-                Picker("Sound", selection: preference(\.endCue.soundName)) {
-                    ForEach(soundNames, id: \.self) { Text($0).tag($0) }
-                }
-                IntegerSettingField("Before end", value: preference(\.endCue.offsetMinutes), range: 0...60, unit: "minutes")
-                Button("Preview end sound") { audioCues.preview(named: state.preferences.endCue.soundName) }
-            }
+            cueSection(isEnd: false)
+            cueSection(isEnd: true)
             Section("Playback") {
                 Slider(value: preference(\.audioVolume), in: 0...1) { Text("App volume") }
                 Text("Zero-minute offsets mean the meeting boundary. App volume does not change system volume. Missed cues are skipped after interruptions; sounds are best-effort while the app is running.")
+                    .font(.caption).foregroundStyle(.secondary)
+                Text("Visual cues appear on the primary display until dismissed or their meeting boundary is reached. Close with ×, or click the artwork then press Escape. They do not interrupt typing. Imported files are copied into Meet Meet; the originals can be moved or removed.")
                     .font(.caption).foregroundStyle(.secondary)
                 if let error = audioCues.errorMessage {
                     Label(error, systemImage: "exclamationmark.triangle").font(.callout)
@@ -353,6 +338,63 @@ private struct SettingsView: View {
             }
         }
         .formStyle(.grouped)
+    }
+
+    private func cueSection(isEnd: Bool) -> some View {
+        let audioKey: WritableKeyPath<AppPreferences, AudioCuePreference> = isEnd ? \.endCue : \.startCue
+        let imageKey: WritableKeyPath<AppPreferences, String?> = isEnd ? \.endSplashImage : \.startSplashImage
+        return Section(isEnd ? "Before end" : "Before start") {
+            Toggle("Audio cue", isOn: preference(audioKey.appending(path: \.isEnabled)))
+            Picker("Sound", selection: preference(audioKey.appending(path: \.soundName))) {
+                ForEach(soundNames, id: \.self) { Text(CueMedia.label(for: $0)).tag($0) }
+            }
+            IntegerSettingField("Audio before \(isEnd ? "end" : "start")", value: preference(audioKey.appending(path: \.offsetMinutes)), range: 0...60, unit: "minutes")
+            HStack {
+                Button("Choose audio file…") { importMedia(audio: true, isEnd: isEnd) }
+                Button("Preview sound") { audioCues.preview(named: state.preferences[keyPath: audioKey].soundName) }
+            }
+            Divider()
+            Toggle("Visual cue", isOn: preference(isEnd ? \.endSplashCueEnabled : \.splashCueEnabled))
+            IntegerSettingField("Visual before \(isEnd ? "end" : "start")", value: preference(isEnd ? \.endSplashLeadMinutes : \.splashLeadMinutes), range: 1...60, unit: "minutes")
+            LabeledContent("Image", value: state.preferences[keyPath: imageKey].map { CueMedia.label(for: $0) } ?? (isEnd ? "wrap-wrap.png" : "meet-meet.png"))
+            HStack {
+                Button("Choose image file…") { importMedia(audio: false, isEnd: isEnd) }
+                if state.preferences[keyPath: imageKey] != nil {
+                    Button("Use default image") { preference(imageKey).wrappedValue = nil }
+                }
+                Button("Preview visual") { previewEnd = isEnd }
+            }
+        }
+    }
+
+    private func importMedia(audio: Bool, isEnd: Bool) {
+        do {
+            guard let name = try CueMedia.choose(audio: audio) else { return }
+            try state.updatePreferences {
+                if audio {
+                    if isEnd { $0.endCue.soundName = name } else { $0.startCue.soundName = name }
+                } else {
+                    if isEnd { $0.endSplashImage = name } else { $0.startSplashImage = name }
+                }
+            }
+        } catch { errorMessage = error.localizedDescription }
+    }
+
+    private func visualPreview(isEnd: Bool) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            if let image = CueMedia.image(named: isEnd ? state.preferences.endSplashImage : state.preferences.startSplashImage, isEnd: isEnd) {
+                Image(nsImage: image).resizable().scaledToFit().frame(maxHeight: 300)
+            } else {
+                Label("Cue image unavailable. Choose another image.", systemImage: "exclamationmark.triangle")
+            }
+            Text("Meeting title").font(.title2.bold())
+            if !isEnd {
+                Text("Meeting location (when available)")
+                Button("Open meeting") {}.disabled(true)
+                Text("Opens the meeting link in its default app when available.").font(.caption)
+            }
+            Button("Done") { previewEnd = nil }.keyboardShortcut(.cancelAction)
+        }.padding(24).frame(width: 440)
     }
 
     private var hiddenEvents: some View {

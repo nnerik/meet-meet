@@ -8,7 +8,7 @@ A personal-first native macOS utility for noticing upcoming meetings and keeping
 
 MVP includes a persistent calendar menu, one floating countdown stack, calendar selection, permanent and temporary hiding, optional bundled/system sounds, and opt-in launch at login.
 
-Out of scope: accounts for this app, analytics/telemetry, a backend, user audio-file import, public distribution, notarization, automatic updates, and older-OS compatibility work. No additional appearance controls were specified beyond system appearance; no other draft feature is silently deferred. No promise of waking the Mac, alarms after Quit, exact real-time playback, or visibility above every system/full-screen surface.
+Out of scope: accounts for this app, analytics/telemetry, a backend, public distribution, notarization, automatic updates, and older-OS compatibility work. No additional appearance controls were specified beyond system appearance; no other draft feature is silently deferred. No promise of waking the Mac, alarms after Quit, exact real-time playback, or visibility above every system/full-screen surface.
 
 ## 2. Platform and boundaries
 
@@ -95,13 +95,14 @@ Use a calendar icon followed by time and summary when relevant:
 - Recover onto the primary display if its display disappears. Re-evaluate usable bounds on display configuration changes.
 - Respect system light/dark appearance and accessibility settings, using semantic colors/materials. Provide VoiceOver meeting identity, upcoming/ongoing state and remaining time even while titles are visually collapsed; avoid continual intrusive announcements.
 
-### Final splash cue
+### Visual cues
 
-- Enabled by default with a one-minute lead time, configurable from 1–60 minutes in General settings, independently of the countdown HUD and audio.
-- Show an image-only, dismissable splash centered in the primary display's usable area. Use the bundled `billboard-light-mode.png` or `billboard-dark-mode.png` for the current system appearance, updating if the theme changes while visible. Preserve aspect ratio and fit within the display.
+- Independent start/end visual cues, both enabled by default, one minute before start and two minutes before end. Each lead time is configurable from 1–60 minutes in Cues settings, independently of the countdown HUD and audio. Preserve existing saved start-cue settings.
+- Show a dismissable splash centered in the primary display's usable area. Use bundled `meet-meet.png` before start and `wrap-wrap.png` before end, regardless of system appearance. Each cue supports a user-provided image, validated and copied into app-local storage. Preserve aspect ratio and fit within the display.
+- Start cues show the full meeting title (with the untitled fallback), available location, and an Open meeting button when a meeting link exists. Open in the default app. Recognize conferencing links in event locations and notes as well as explicit event URLs. End cues show the meeting title only.
 - Appear without activating the app, taking keyboard focus or switching Spaces. Provide a close button; clicking the artwork may focus the nonactivating panel so Escape dismisses it without keyboard-monitoring permissions.
-- Show for eligible upcoming meetings within the configured interval, including launch/wake/resume inside that interval. Hide at meeting start, when disabled, on pause/access loss, or when the relevant meeting is hidden/removed. Never show an ongoing meeting's start cue.
-- Coincident/overlapping cue intervals share a single splash. Dismiss all currently represented occurrences together and persist manual dismissals across restart; a later distinct occurrence can show a new splash. Failed dismissal persistence must not prevent live dismissal and must be reported.
+- Show for eligible upcoming meetings within the start interval and ongoing meetings within the end interval, including launch/wake/resume inside those intervals. Hide at the corresponding boundary, when disabled, on pause/access loss, or when the relevant meeting is hidden/removed. Never show an ongoing meeting's start cue or an upcoming meeting's end cue. Short meetings may show an end cue as soon as they start.
+- Coincident/overlapping cue intervals share a single scrollable splash with artwork and meeting details for each phase. Dismiss all currently represented occurrence/phase pairs together and persist manual dismissals across restart, independently for start and end; a later distinct cue can show a new splash. Legacy dismissals apply to start only. Failed dismissal persistence must not prevent live dismissal and must be reported.
 - Respect selected calendars, permanent hiding and Pause for Today. Temporary countdown suppression does not suppress the splash. Invalid or ambiguous occurrences cannot trigger it; unreadable reminder/dismissal records disable automatic splash presentation rather than risking unwanted repeats.
 
 ## 7. Permanent hiding and temporary suppression
@@ -137,7 +138,7 @@ Use a calendar icon followed by time and summary when relevant:
 
 ## 9. Audio
 
-- App-bundled MP3 cues plus system sounds. No custom audio import. Two independent global opt-in cues: before start and before end; each has a sound and offset. Default sounds are `meet-meet.mp3` before start and `wrap-wrap.mp3` before end; preserve existing saved sound choices.
+- App-bundled MP3 cues, system sounds and user-provided audio files. Validate imported files and copy them into app-local storage so moving the original cannot break playback. Two independent global opt-in cues: before start and before end; each has a sound and offset. Default sounds are `meet-meet.mp3` before start and `wrap-wrap.mp3` before end; preserve existing saved sound choices.
 - Both default off. Suggested offsets: 1 minute before start and 2 minutes before end. Offsets 0–60 minutes; zero means at the boundary.
 - Provide Preview and app-level volume without changing system volume. Surface actionable playback failures.
 - Scheduled cues also wiggle each corresponding already-visible HUD icon five times, with a one-second pause between repeats, respecting Reduce Motion. Do not reveal hidden/out-of-window rows or retain ended rows for this effect. Preview does not trigger the HUD cue. Coincident cues animate all corresponding visible icons even when audio is coalesced.
@@ -154,15 +155,16 @@ Use a calendar icon followed by time and summary when relevant:
 | --- | --- | --- |
 | Launch at login | Off | Actual service state with enable/disable action |
 | HUD lead time | 30 minutes | 0–120 minutes; zero ongoing-only |
-| Final splash cue | On; 1 minute before start | Enable/disable; lead time 1–60 minutes |
+| Start visual cue | On; meet-meet.png; 1 minute before start | Enable/disable; lead time 1–60 minutes; default or imported image |
+| End visual cue | On; wrap-wrap.png; 2 minutes before end | Enable/disable; lead time 1–60 minutes; default or imported image |
 | Seconds threshold | 5 minutes | 0–60 minutes; zero disables seconds |
 | Menu title limit | 24 characters | 8–80 characters |
-| Start audio | Off; meet-meet; suggested offset 1 minute | Bundled or system sound, enable/disable, offset 0–60 minutes |
-| End audio | Off; wrap-wrap; suggested offset 2 minutes | Bundled or system sound, enable/disable, offset 0–60 minutes |
+| Start audio | Off; meet-meet; suggested offset 1 minute | Bundled, system or imported sound, enable/disable, offset 0–60 minutes |
+| End audio | Off; wrap-wrap; suggested offset 2 minutes | Bundled, system or imported sound, enable/disable, offset 0–60 minutes |
 | Audio volume | Normal playback level | App-local volume, never system volume |
 | Calendar selection | Explicit onboarding choice | Available EventKit calendars; new calendars unselected |
 
-Settings sections: General, Calendars, Audio and Hidden Events. General includes menu-title length as well as countdown, splash and login controls. Validate input and apply changes immediately without retroactive audio.
+Settings sections: General, Calendars, Cues and Hidden Events. General includes menu-title length, countdown and login controls. Cues groups before-start and before-end audio and visual settings, imports and previews, plus app-local audio volume. Validate input and apply changes immediately without retroactive audio.
 
 Minute/count settings support direct whole-number entry as well as optional steppers. Commit typed values on Return or focus loss; show inline range errors without saving invalid input. The 30-minute lead-time default applies to fresh/missing preferences, not as an override of an existing saved choice.
 

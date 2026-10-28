@@ -36,6 +36,8 @@ public struct MeetingOccurrence: Identifiable, Equatable, Sendable {
 
     public var key: OccurrenceKey { OccurrenceKey(calendarID: calendarID, occurrenceID: id) }
 
+    public var meetingURL: URL? { MeetingLink.resolve(url: url, location: location) }
+
     /// Shared structural eligibility; boundary/time-window filtering belongs to callers.
     public var isEligibleMeeting: Bool {
         !isAllDay && !isCancelled && attendance != .declined &&
@@ -45,6 +47,38 @@ public struct MeetingOccurrence: Identifiable, Equatable, Sendable {
     public func phase(at now: Date) -> MeetingPhase {
         if now >= end { return .ended }
         return now >= start ? .ongoing : .upcoming
+    }
+}
+
+public enum MeetingLink {
+    /// Event URLs and location links are explicit destinations. In free-form notes,
+    /// only recognize conferencing services rather than opening an unrelated link.
+    public static func resolve(url: URL?, location: String?, notes: String? = nil) -> URL? {
+        let explicit = url.flatMap { isSupported($0) ? $0 : nil }
+        if let explicit, isConference(explicit) { return explicit }
+        guard let detector = try? NSDataDetector(types: NSTextCheckingResult.CheckingType.link.rawValue) else { return explicit }
+        var locationURL: URL?
+        for (text, requiresConference) in [(location, false), (notes, true)] {
+            guard let text else { continue }
+            for match in detector.matches(in: text, range: NSRange(text.startIndex..., in: text)) {
+                guard let candidate = match.url, isSupported(candidate) else { continue }
+                if isConference(candidate) { return candidate }
+                if !requiresConference, locationURL == nil { locationURL = candidate }
+            }
+        }
+        return explicit ?? locationURL
+    }
+
+    private static func isConference(_ url: URL) -> Bool {
+        if ["zoommtg", "zoomus", "msteams", "webex"].contains(url.scheme?.lowercased() ?? "") { return true }
+        let host = url.host?.lowercased() ?? ""
+        let services = ["meet.google.com", "zoom.us", "zoom.com", "teams.microsoft.com", "teams.cloud.microsoft", "teams.live.com", "webex.com", "whereby.com", "meet.jit.si"]
+        return services.contains { host == $0 || host.hasSuffix("." + $0) }
+    }
+
+    private static func isSupported(_ url: URL) -> Bool {
+        guard let scheme = url.scheme?.lowercased() else { return false }
+        return ["https", "http", "zoommtg", "zoomus", "msteams", "webex"].contains(scheme)
     }
 }
 

@@ -25,9 +25,10 @@ while you're working, and a more obvious nudge when it's time to join.
   Hover to reveal meeting titles, or drag the whole stack somewhere else.
 - **Keep an eye on the finish line.** When a meeting starts, its countdown
   switches to time remaining so you know when to wrap up.
-- **Get a final nudge.** A dismissable splash appears one minute before start
-  by default. Change its lead time or turn it off. Optional start/end sounds
-  are available too.
+- **Get a final nudge.** Dismissable visual cues appear one minute before start
+  and two minutes before end by default. Start cues show the title, location and
+  an available meeting link; end cues show the title. Configure timing, optional
+  sounds, and your own audio or images in **Settings → Cues**.
 - **Stay in control.** Hide meetings or recurring series you don't need reminders
   for, temporarily hide a countdown, or use **Pause for Today**.
 
@@ -41,8 +42,8 @@ in the menu bar, not the Dock. It reads your calendars; it never edits events.
 | <img src="docs/images/countdowns-light.png" alt="Light-mode countdown HUD showing Design review starting in 4 minutes 32 seconds and Team sync ending in 12 minutes" width="411"> | <img src="docs/images/countdowns-dark.png" alt="Dark-mode countdown HUD showing the same upcoming and ongoing meetings" width="411"> |
 
 *Actual HUD rendering with fictional meetings, shown with titles revealed.
-The bell means “starts in”; the play icon means “ends in”. The billboard above
-is also the artwork used for the light-mode final cue.*
+The bell means “starts in”; the play icon means “ends in”. Visual cues use
+`meet-meet.png` before start and `wrap-wrap.png` before end, in either appearance.*
 
 ## Download
 

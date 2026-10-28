@@ -84,7 +84,8 @@ actor EventKitCalendarReader: CalendarReading {
             id: evidence.occurrenceID(start: start), calendarID: calendar.calendarIdentifier,
             title: event.title ?? "", start: start, end: end, isAllDay: event.isAllDay,
             isCancelled: event.status == .canceled, attendance: attendance, availability: availability,
-            identityEvidence: evidence, location: event.location, url: event.url
+            identityEvidence: evidence, location: event.location,
+            url: MeetingLink.resolve(url: event.url, location: event.location, notes: event.notes)
         )
     }
 }

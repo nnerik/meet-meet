@@ -69,6 +69,10 @@ func allRecordsSurviveReconstruction() throws {
         $0.audioVolume = 0.4
         $0.splashCueEnabled = false
         $0.splashLeadMinutes = 10
+        $0.endSplashCueEnabled = false
+        $0.endSplashLeadMinutes = 5
+        $0.startSplashImage = "imported-start.png"
+        $0.endSplashImage = "imported-end.png"
     }
     try state.setSelectedCalendarIDs(["work", "personal"])
     try state.setOnboardingCompleted(true)
@@ -78,6 +82,7 @@ func allRecordsSurviveReconstruction() throws {
     try state.setCountdownSuppressions(suppressions)
     try state.setHandledCues(cues)
     try state.setDismissedSplashCues([occurrence])
+    try state.setDismissedEndSplashCues([occurrence])
 
     let restored = AppState(storage: storage)
     #expect(restored.preferences == state.preferences)
@@ -89,6 +94,7 @@ func allRecordsSurviveReconstruction() throws {
     #expect(restored.countdownSuppressions == suppressions)
     #expect(restored.handledCues == cues)
     #expect(restored.dismissedSplashCues == [occurrence])
+    #expect(restored.dismissedEndSplashCues == [occurrence])
     #expect(restored.recoveryNotices.isEmpty)
     #expect(storage.records.count == AppStateRecord.allCases.count)
 }
@@ -104,6 +110,7 @@ func invalidPreferenceEditsDoNotMutateStateOrStorage() throws {
         { $0.secondsThresholdMinutes = -1 }, { $0.secondsThresholdMinutes = 61 },
         { $0.menuTitleLimit = 7 }, { $0.menuTitleLimit = 81 },
         { $0.splashLeadMinutes = 0 }, { $0.splashLeadMinutes = 61 },
+        { $0.endSplashLeadMinutes = 0 }, { $0.endSplashLeadMinutes = 61 },
         { $0.startCue.offsetMinutes = -1 }, { $0.startCue.offsetMinutes = 61 },
         { $0.endCue.offsetMinutes = -1 }, { $0.endCue.offsetMinutes = 61 },
         { $0.audioVolume = -0.1 }, { $0.audioVolume = 1.1 },
