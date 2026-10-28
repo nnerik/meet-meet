@@ -1,6 +1,10 @@
 import Foundation
 
 public enum MeetingText {
+    public static func displayLocation(_ raw: String, shortenGoogleRoomNames: Bool) -> String {
+        shortenGoogleRoomNames ? GoogleLocationShortener.shorten(location: raw) : raw
+    }
+
     public static func displayTitle(_ raw: String) -> String {
         let title = raw.trimmingCharacters(in: .whitespacesAndNewlines)
         return title.isEmpty ? "Untitled meeting" : title

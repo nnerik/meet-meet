@@ -49,3 +49,37 @@ func calendarBoundary() async throws {
     #expect(await fixture.requestedCalendarIDs == ["work"])
     #expect(await reader.access() == .fullAccess)
 }
+
+@Test(arguments: [
+    ("HQ-3-Boardroom", "Boardroom"),
+    ("US-NYC-02-D-Boardroom (16) [Google Meet, TV]", "Boardroom"),
+    ("HQ_Annex-B1-Laboratory (2)", "Laboratory"),
+    ("(Microscope) HQ-3-Laboratory [VC]", "Laboratory"),
+    ("HQ-LL-Lounge", "Lounge"),
+    ("HQ-G-Lounge", "Lounge"),
+    ("HQ-M-Lounge", "Lounge"),
+    ("HQ-MZ-Lounge", "Lounge"),
+    ("HQ-PH-Lounge", "Lounge"),
+    ("HQ-Lobby-Lounge", "Lounge"),
+    ("HQ-Mezzanine-Lounge", "Lounge"),
+    ("HQ-Basement-Lounge", "Lounge"),
+    ("HQ-Ground-Lounge", "Lounge"),
+    ("HQ-3A-2-Boardroom", "Boardroom"),
+    ("HQ-3-Board-Room-2 (8) [VC]", "Board-Room-2"),
+    ("  HQ-02-会議室 (8) [Google Meet]  ", "会議室"),
+])
+func googleWorkspaceLocationsShortenToRoomNames(location: String, expected: String) {
+    #expect(GoogleLocationShortener.shorten(location: location) == expected)
+    #expect(MeetingText.displayLocation(location, shortenGoogleRoomNames: true) == expected)
+    #expect(MeetingText.displayLocation(location, shortenGoogleRoomNames: false) == location)
+}
+
+@Test(arguments: [
+    "", "  ", "  Meeting room  ", "Boardroom (16) [Google Meet, TV]",
+    "(Microscope) Laboratory (2)", "HQ-second-Boardroom [VC]",
+    "HQ-3- (16) [VC]", "HQ-3-", "https://meet.google.com/abc-defg-hij",
+    "123 Main Street", "Room [VC]", "Building / Floor 3 / Boardroom",
+])
+func nonmatchingOrEmptyGoogleRoomNamesRemainUntouched(location: String) {
+    #expect(GoogleLocationShortener.shorten(location: location) == location)
+}

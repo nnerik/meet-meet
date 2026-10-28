@@ -16,6 +16,7 @@ public struct AppPreferences: Codable, Equatable, Sendable {
     public var hudLeadMinutes = 30
     public var secondsThresholdMinutes = 5
     public var menuTitleLimit = 24
+    public var shortenGoogleRoomNames = false
     public var splashCueEnabled = true
     public var splashLeadMinutes = 1
     public var endSplashCueEnabled = true
@@ -51,6 +52,7 @@ public struct AppPreferences: Codable, Equatable, Sendable {
     private enum CodingKeys: String, CodingKey {
         case hudLeadMinutes, secondsThresholdMinutes, menuTitleLimit, splashCueEnabled, splashLeadMinutes, startCue, endCue, audioVolume
         case endSplashCueEnabled, endSplashLeadMinutes, startSplashImage, endSplashImage
+        case shortenGoogleRoomNames
     }
 
     /// Recover individual malformed fields without discarding valid sibling preferences.
@@ -60,6 +62,7 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         if let value = try? values.decode(Int.self, forKey: .hudLeadMinutes), (0...120).contains(value) { hudLeadMinutes = value }
         if let value = try? values.decode(Int.self, forKey: .secondsThresholdMinutes), (0...60).contains(value) { secondsThresholdMinutes = value }
         if let value = try? values.decode(Int.self, forKey: .menuTitleLimit), (8...80).contains(value) { menuTitleLimit = value }
+        if let value = try? values.decode(Bool.self, forKey: .shortenGoogleRoomNames) { shortenGoogleRoomNames = value }
         if let value = try? values.decode(Bool.self, forKey: .splashCueEnabled) { splashCueEnabled = value }
         if let value = try? values.decode(Int.self, forKey: .splashLeadMinutes), (1...60).contains(value) { splashLeadMinutes = value }
         if let value = try? values.decode(Bool.self, forKey: .endSplashCueEnabled) { endSplashCueEnabled = value }

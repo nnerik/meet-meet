@@ -103,7 +103,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func addMeeting(_ entry: MeetingMenuEntry, isTomorrow: Bool = false, to menu: NSMenu) {
-        let item = MeetingMenuItem(entry: entry, isTomorrow: isTomorrow, formatTime: formattedTime) { [weak self] action, key in
+        let item = MeetingMenuItem(entry: entry, isTomorrow: isTomorrow,
+                                   shortenGoogleRoomNames: state.preferences.shortenGoogleRoomNames,
+                                   formatTime: formattedTime) { [weak self] action, key in
             self?.performReminderAction(action, for: key)
         }
         menu.addItem(item)
@@ -309,6 +311,11 @@ private struct SettingsView: View {
             }
             Section("Menu bar") {
                 IntegerSettingField("Title length", value: preference(\.menuTitleLimit), range: 8...80, unit: "characters")
+            }
+            Section("Meeting locations") {
+                Toggle("Shorten meeting room names", isOn: preference(\.shortenGoogleRoomNames))
+                Text("Supports Google Workspace structured room names only (building-floor-room, with an optional section, capacity and features). Other location formats are left unchanged. Applies to meeting details and start visual cues; calendar events are never changed.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section("Login") {
                 LoginLaunchControls(login: login)

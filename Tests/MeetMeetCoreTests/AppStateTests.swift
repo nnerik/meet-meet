@@ -17,6 +17,7 @@ func freshStateHasApprovedDefaultsWithoutWriting() {
     #expect(state.preferences.hudLeadMinutes == 30)
     #expect(state.preferences.secondsThresholdMinutes == 5)
     #expect(state.preferences.menuTitleLimit == 24)
+    #expect(!state.preferences.shortenGoogleRoomNames)
     #expect(!state.preferences.startCue.isEnabled)
     #expect(!state.preferences.endCue.isEnabled)
     #expect(state.preferences.startCue.offsetMinutes == 1)
@@ -62,6 +63,7 @@ func allRecordsSurviveReconstruction() throws {
         $0.hudLeadMinutes = 120
         $0.secondsThresholdMinutes = 0
         $0.menuTitleLimit = 80
+        $0.shortenGoogleRoomNames = true
         $0.startCue.isEnabled = true
         $0.startCue.soundName = "Basso"
         $0.startCue.offsetMinutes = 0
@@ -97,6 +99,16 @@ func allRecordsSurviveReconstruction() throws {
     #expect(restored.dismissedEndSplashCues == [occurrence])
     #expect(restored.recoveryNotices.isEmpty)
     #expect(storage.records.count == AppStateRecord.allCases.count)
+}
+
+@Test func roomShorteningDefaultsOffForOldOrMalformedPreferences() throws {
+    for json in [#"{}"#, #"{"shortenGoogleRoomNames":"yes","menuTitleLimit":40}"#] {
+        let preferences = try JSONDecoder().decode(AppPreferences.self, from: Data(json.utf8))
+        #expect(!preferences.shortenGoogleRoomNames)
+    }
+    let saved = try JSONDecoder().decode(AppPreferences.self, from: Data(#"{"shortenGoogleRoomNames":true,"menuTitleLimit":40}"#.utf8))
+    #expect(saved.shortenGoogleRoomNames)
+    #expect(saved.menuTitleLimit == 40)
 }
 
 @Test @MainActor

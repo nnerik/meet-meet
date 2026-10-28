@@ -4,6 +4,22 @@ import Testing
 @testable import MeetMeetCore
 #if !SWIFT_PACKAGE
 import AppKit
+@Test @MainActor
+func nativeMeetingMenuShortensOnlyDisplayedLocationsWhenEnabled() throws {
+    let raw = "US-NYC-02-D-Boardroom (16) [Google Meet, TV]"
+    let event = MeetingOccurrence(id: "room", calendarID: "work", title: "Room fixture",
+                                  start: pauseTestNow.addingTimeInterval(60), end: pauseTestNow.addingTimeInterval(600),
+                                  location: raw, url: URL(string: "https://meet.google.com/abc-defg-hij"))
+    let entry = MeetingMenuEntry(meeting: event, calendarTitle: "Work", isCountdownSuppressed: false, at: pauseTestNow)
+    let original = MeetingMenuItem(entry: entry, formatTime: { _ in "START" }) { _, _ in }
+    #expect(original.submenu?.items.contains { $0.title == "Location: " + raw } == true)
+    let shortened = MeetingMenuItem(entry: entry, shortenGoogleRoomNames: true, formatTime: { _ in "START" }) { _, _ in }
+    let location = try #require(shortened.submenu?.items.first { $0.title.hasPrefix("Location:") })
+    #expect(location.title == "Location: Boardroom")
+    #expect(location.toolTip == "Location: " + raw)
+    #expect(entry.meeting.location == raw)
+    #expect(shortened.submenu?.items.contains { $0.title == event.url?.absoluteString } == true)
+}
 #endif
 
 private let pauseTestNow = Date(timeIntervalSince1970: 1_800_000_000)

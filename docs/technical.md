@@ -67,6 +67,15 @@ catches up inside either visual cue interval, but end visuals never appear befor
 the meeting starts. Pause and hidden meetings suppress both; temporary countdown
 hiding and the regular HUD's lead time do not affect them.
 
+**Settings → General → Meeting locations → Shorten meeting room names** is
+off by default and supports only Google Workspace structured room names. For
+example, `HQ-3-D-Boardroom (16) [Google Meet, TV]` displays as `Boardroom` in
+meeting details and start visual cues. The optional resource type, building,
+floor, section, capacity and features are removed only when the structured
+pattern matches; other locations remain unchanged. The setting changes display
+text only, never calendar events or meeting-link detection. Menu location
+tooltips retain the original location.
+
 The same **Cues** tab offers independent start/end audio cues (both off by default),
 bundled, system or imported sound selection, Preview and app-local volume. The bundled
 `media/meet-meet.mp3` and `media/wrap-wrap.mp3` are the start/end defaults for new

@@ -446,9 +446,10 @@ func nativeSplashIsCenteredPassiveAppearanceIndependentAndDismissable() async th
     controller.start()
     #expect(!window.isVisible)
     let now = Date()
+    let rawLocation = "HQ-3-D-Room 42 (8) [Google Meet, TV]"
     let meeting = MeetingOccurrence(id: "splash", calendarID: "fixture", title: "Splash fixture",
                                     start: now.addingTimeInterval(30), end: now.addingTimeInterval(600),
-                                    location: "Room 42", url: URL(string: "https://meet.google.com/abc-defg-hij"))
+                                    location: rawLocation, url: URL(string: "https://meet.google.com/abc-defg-hij"))
     cues.update(occurrences: [meeting], isActive: true, at: now)
     #expect(await waitForHUD { window.isVisible })
     #expect(application.keyWindow === previousKey)
@@ -466,13 +467,23 @@ func nativeSplashIsCenteredPassiveAppearanceIndependentAndDismissable() async th
     let views = descendants(content)
     let image = try #require(views.compactMap { $0 as? NSImageView }.first)
     #expect(views.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Splash fixture" })
-    #expect(views.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Room 42" })
+    #expect(views.compactMap { $0 as? NSTextField }.contains { $0.stringValue == rawLocation })
     #expect(views.compactMap { $0 as? NSButton }.contains { $0.title == "Open meeting" })
     #expect(image.frame.height > 100)
     #expect(window.frame.height > image.frame.height)
     window.appearance = NSAppearance(named: .aqua)
     #expect(await waitForHUD { image.identifier?.rawValue == "meet-meet" })
     #expect(image.image != nil)
+    try state.updatePreferences { $0.shortenGoogleRoomNames = true }
+    #expect(await waitForHUD {
+        descendants(content).compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Room 42" }
+    })
+    #expect(meeting.location == rawLocation)
+    #expect(meeting.meetingURL?.absoluteString == "https://meet.google.com/abc-defg-hij")
+    try state.updatePreferences { $0.shortenGoogleRoomNames = false }
+    #expect(await waitForHUD {
+        descendants(content).compactMap { $0 as? NSTextField }.contains { $0.stringValue == rawLocation }
+    })
     window.appearance = NSAppearance(named: .darkAqua)
     #expect(await waitForHUD { image.identifier?.rawValue == "meet-meet" })
     #expect(image.image != nil)
@@ -505,7 +516,7 @@ func nativeSplashIsCenteredPassiveAppearanceIndependentAndDismissable() async th
     let endViews = descendants(content)
     #expect(endViews.compactMap { $0 as? NSImageView }.first?.identifier?.rawValue == "wrap-wrap")
     #expect(endViews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Splash fixture" })
-    #expect(!endViews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Room 42" })
+    #expect(!endViews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == rawLocation })
     #expect(!endViews.compactMap { $0 as? NSButton }.contains { $0.title == "Open meeting" })
     cues.update(occurrences: [meeting], isActive: true, at: meeting.end)
     #expect(await waitForHUD { !window.isVisible })

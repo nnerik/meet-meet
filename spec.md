@@ -159,12 +159,15 @@ Use a calendar icon followed by time and summary when relevant:
 | End visual cue | On; wrap-wrap.png; 2 minutes before end | Enable/disable; lead time 1–60 minutes; default or imported image |
 | Seconds threshold | 5 minutes | 0–60 minutes; zero disables seconds |
 | Menu title limit | 24 characters | 8–80 characters |
+| Shorten meeting room names | Off | Google Workspace structured locations only; display-only |
 | Start audio | Off; meet-meet; suggested offset 1 minute | Bundled, system or imported sound, enable/disable, offset 0–60 minutes |
 | End audio | Off; wrap-wrap; suggested offset 2 minutes | Bundled, system or imported sound, enable/disable, offset 0–60 minutes |
 | Audio volume | Normal playback level | App-local volume, never system volume |
 | Calendar selection | Explicit onboarding choice | Available EventKit calendars; new calendars unselected |
 
 Settings sections: General, Calendars, Cues and Hidden Events. General includes menu-title length, countdown and login controls. Cues groups before-start and before-end audio and visual settings, imports and previews, plus app-local audio volume. Validate input and apply changes immediately without retroactive audio.
+
+General also offers **Shorten meeting room names**, off by default, with an explicit Google Workspace-only limitation. For matching `building-floor[-section]-room` locations, display only the room name in meeting details and start visual cues, removing optional resource type, capacity and feature decorations. Support numeric floors, basement/level codes and named floors (Lobby, Mezzanine, Basement, Ground). Leave non-matching locations untouched. Preserve raw calendar locations and meeting-link resolution; menu location tooltips retain the original string. Persist the choice and apply display changes immediately.
 
 Minute/count settings support direct whole-number entry as well as optional steppers. Commit typed values on Return or focus loss; show inline range errors without saving invalid input. The 30-minute lead-time default applies to fresh/missing preferences, not as an override of an existing saved choice.
 

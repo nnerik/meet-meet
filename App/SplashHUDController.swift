@@ -214,7 +214,8 @@ private final class SplashArtworkView: NSView {
                         width: availableWidth, bold: true)
                 if !isEnd {
                     if let location = meeting.location, !location.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                        addText(location, width: availableWidth)
+                        addText(MeetingText.displayLocation(location, shortenGoogleRoomNames: preferences.shortenGoogleRoomNames),
+                                width: availableWidth)
                     }
                     if let url = meeting.meetingURL {
                         let button = MeetingLinkButton(url: url)

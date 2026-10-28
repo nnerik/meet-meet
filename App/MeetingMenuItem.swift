@@ -6,7 +6,7 @@ import MeetMeetCore
 final class MeetingMenuItem: NSMenuItem {
     private let performAction: (MeetingReminderAction, OccurrenceKey) -> Void
 
-    init(entry: MeetingMenuEntry, isTomorrow: Bool = false, formatTime: (Date) -> String,
+    init(entry: MeetingMenuEntry, isTomorrow: Bool = false, shortenGoogleRoomNames: Bool = false, formatTime: (Date) -> String,
          performAction: @escaping (MeetingReminderAction, OccurrenceKey) -> Void) {
         self.performAction = performAction
         let event = entry.meeting
@@ -22,7 +22,10 @@ final class MeetingMenuItem: NSMenuItem {
                       "Ends: \(event.end.formatted(date: .abbreviated, time: .shortened))"] {
             addLabel(title, to: menu)
         }
-        if let location = event.location, !location.isEmpty { addLabel("Location: " + location, to: menu) }
+        if let location = event.location, !location.isEmpty {
+            let display = MeetingText.displayLocation(location, shortenGoogleRoomNames: shortenGoogleRoomNames)
+            addLabel("Location: " + display, toolTip: "Location: " + location, to: menu)
+        }
         if let url = event.url { addLabel(url.absoluteString, to: menu) }
         menu.addItem(.separator())
         addAction("Hide this meeting", .hideOccurrence, enabled: entry.canHideOccurrence, key: event.key, to: menu)
@@ -39,10 +42,10 @@ final class MeetingMenuItem: NSMenuItem {
 
     required init(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
 
-    private func addLabel(_ title: String, to menu: NSMenu) {
+    private func addLabel(_ title: String, toolTip: String? = nil, to menu: NSMenu) {
         let item = menu.addItem(withTitle: title, action: nil, keyEquivalent: "")
         item.isEnabled = false
-        item.toolTip = title
+        item.toolTip = toolTip ?? title
     }
 
     private func addAction(_ title: String, _ action: MeetingReminderAction, enabled: Bool = true, key: OccurrenceKey, to menu: NSMenu) {
