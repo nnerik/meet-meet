@@ -353,7 +353,9 @@ private struct SettingsView: View {
         return Section(isEnd ? "Before end" : "Before start") {
             Toggle("Audio cue", isOn: preference(audioKey.appending(path: \.isEnabled)))
             Picker("Sound", selection: preference(audioKey.appending(path: \.soundName))) {
-                ForEach(soundNames, id: \.self) { Text(CueMedia.label(for: $0)).tag($0) }
+                ForEach(SystemSoundPlayer.soundNames(isEnd: isEnd, selectedNames: [state.preferences.startCue.soundName, state.preferences.endCue.soundName]), id: \.self) {
+                    Text(CueMedia.label(for: $0)).tag($0)
+                }
             }
             IntegerSettingField("Audio before \(isEnd ? "end" : "start")", value: preference(audioKey.appending(path: \.offsetMinutes)), range: 0...60, unit: "minutes")
             HStack {
@@ -363,7 +365,7 @@ private struct SettingsView: View {
             Divider()
             Toggle("Visual cue", isOn: preference(isEnd ? \.endSplashCueEnabled : \.splashCueEnabled))
             IntegerSettingField("Visual before \(isEnd ? "end" : "start")", value: preference(isEnd ? \.endSplashLeadMinutes : \.splashLeadMinutes), range: 1...60, unit: "minutes")
-            LabeledContent("Image", value: state.preferences[keyPath: imageKey].map { CueMedia.label(for: $0) } ?? (isEnd ? "wrap-wrap.png" : "meet-meet.png"))
+            LabeledContent("Image", value: state.preferences[keyPath: imageKey].map { CueMedia.label(for: $0) } ?? "Default")
             HStack {
                 Button("Choose image file…") { importMedia(audio: false, isEnd: isEnd) }
                 if state.preferences[keyPath: imageKey] != nil {
@@ -447,11 +449,6 @@ private struct SettingsView: View {
                 }
             }
         }
-    }
-
-    private var soundNames: [String] {
-        let names = SystemSoundPlayer.soundNames
-        return Set(names + [state.preferences.startCue.soundName, state.preferences.endCue.soundName]).sorted()
     }
 
     private func preference<Value>(_ key: WritableKeyPath<AppPreferences, Value>) -> Binding<Value> {

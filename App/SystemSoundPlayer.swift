@@ -22,6 +22,8 @@ enum CueMedia {
     }
 
     static func label(for name: String) -> String {
+        if name == "meet-meet" { return "Meet Meet" }
+        if name == "wrap-wrap" { return "Wrap Wrap" }
         guard url(for: name) != nil else { return name }
         return String(name.dropFirst(prefix.count + 37))
     }
@@ -81,6 +83,13 @@ final class SystemSoundPlayer: NSObject, SystemSoundPlaying, NSSoundDelegate {
     static var soundNames: [String] {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: "/System/Library/Sounds")) ?? []
         return bundledSoundNames + files.filter { $0.hasSuffix(".aiff") }.map { String($0.dropLast(5)) }.sorted()
+    }
+
+    static func soundNames(isEnd: Bool, selectedNames: [String]) -> [String] {
+        let excluded = isEnd ? "meet-meet" : "wrap-wrap"
+        return Set(soundNames + selectedNames).filter { $0 != excluded }.sorted {
+            CueMedia.label(for: $0) < CueMedia.label(for: $1)
+        }
     }
 
     private var playing: [NSSound] = []

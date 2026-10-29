@@ -7,6 +7,23 @@ private let audioNow = Date(timeIntervalSince1970: 1_800_000_000)
 #if !SWIFT_PACKAGE
 import AppKit
 
+@Test @MainActor func nativeSoundPickersOnlyOfferTheirOwnBundledDefaultWithFriendlyLabels() {
+    let imported = "imported:\(UUID().uuidString)-custom.mp3"
+    let selections = ["meet-meet", "wrap-wrap", imported, "Glass"]
+    let start = SystemSoundPlayer.soundNames(isEnd: false, selectedNames: selections)
+    let end = SystemSoundPlayer.soundNames(isEnd: true, selectedNames: selections)
+    #expect(start.contains("meet-meet") && !start.contains("wrap-wrap"))
+    #expect(end.contains("wrap-wrap") && !end.contains("meet-meet"))
+    for names in [start, end] {
+        #expect(names.contains("Glass") && names.contains(imported))
+        #expect(names.count == Set(names).count)
+    }
+    #expect(CueMedia.label(for: "meet-meet") == "Meet Meet")
+    #expect(CueMedia.label(for: "wrap-wrap") == "Wrap Wrap")
+    #expect(CueMedia.label(for: "Glass") == "Glass")
+    #expect(CueMedia.label(for: imported) == "custom.mp3")
+}
+
 @Test @MainActor func nativeBundledMP3CuesResolveAndDecodeWithoutPlayback() throws {
     let bundle = Bundle(for: SystemSoundPlayer.self)
     let player = SystemSoundPlayer(bundle: bundle)
