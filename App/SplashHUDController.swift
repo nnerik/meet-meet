@@ -13,12 +13,13 @@ final class SplashHUDController: NSObject {
     private var running = false
     private var generation = 0
     private var screenObserver: AnyCancellable?
+    private var presentedRevision = -1
 
-    init(session: SplashCueSession) {
+    init(session: SplashCueSession, openURL: @escaping (URL) -> Bool = { NSWorkspace.shared.open($0) }) {
         self.session = session
         panel = SplashPanel(contentRect: .zero, styleMask: [.borderless, .nonactivatingPanel],
                             backing: .buffered, defer: false)
-        artwork = SplashArtworkView(bundle: Bundle(for: SplashHUDController.self))
+        artwork = SplashArtworkView(bundle: Bundle(for: SplashHUDController.self), openURL: openURL)
         super.init()
         panel.identifier = NSUserInterfaceItemIdentifier("meetmeet.splashHUD")
         panel.contentView = artwork
@@ -56,9 +57,10 @@ final class SplashHUDController: NSObject {
 
     private func observe(_ token: Int) {
         withObservationTracking {
-            _ = session.meetings
+            _ = session.infoMeetings
             _ = session.endMeetings
             _ = session.preferences
+            _ = session.presentationRevision
         } onChange: { [weak self] in
             Task { @MainActor in
                 guard let self, self.running, self.generation == token else { return }
@@ -71,18 +73,21 @@ final class SplashHUDController: NSObject {
     private func synchronize() {
         guard running else { return }
         // NSScreen.main follows keyboard focus; screens.first is the primary display.
-        guard !session.meetings.isEmpty || !session.endMeetings.isEmpty, let screen = NSScreen.screens.first else {
+        guard !session.infoMeetings.isEmpty || !session.endMeetings.isEmpty, let screen = NSScreen.screens.first else {
             panel.orderOut(nil)
             return
         }
         let area = screen.visibleFrame
         let width = min(640, area.width * 0.8)
-        artwork.update(start: session.meetings, end: session.endMeetings, preferences: session.preferences, width: width)
+        artwork.update(start: session.infoMeetings, end: session.endMeetings, preferences: session.preferences, width: width)
         let height = min(artwork.contentHeight, area.height * 0.8)
-        panel.setAccessibilityLabel(session.meetings.isEmpty ? "Meeting ends soon" : "Meeting starts soon")
+        panel.setAccessibilityLabel(session.infoMeetings.isEmpty ? "Meeting ends soon" : "Meeting info")
         panel.setFrame(NSRect(x: area.midX - width / 2, y: area.midY - height / 2,
                               width: width, height: height), display: true)
-        if !panel.isVisible { panel.orderFrontRegardless() }
+        if !panel.isVisible || presentedRevision != session.presentationRevision {
+            panel.orderFrontRegardless()
+            presentedRevision = session.presentationRevision
+        }
     }
 
     private func dismiss() {
@@ -104,6 +109,7 @@ private final class SplashPanel: NSPanel {
 
 private final class SplashArtworkView: NSView {
     private let bundle: Bundle
+    private let openURL: (URL) -> Bool
     private let scrollView = NSScrollView()
     private let stack = NSStackView()
     private lazy var stackWidth = stack.widthAnchor.constraint(equalToConstant: 0)
@@ -116,8 +122,9 @@ private final class SplashArtworkView: NSView {
     var contentHeight: CGFloat { stack.fittingSize.height + 44 }
     var dismiss: (() -> Void)?
 
-    init(bundle: Bundle) {
+    init(bundle: Bundle, openURL: @escaping (URL) -> Bool) {
         self.bundle = bundle
+        self.openURL = openURL
         super.init(frame: .zero)
         wantsLayer = true
         layer?.cornerRadius = 16
@@ -133,12 +140,12 @@ private final class SplashArtworkView: NSView {
         addSubview(scrollView)
         stack.translatesAutoresizingMaskIntoConstraints = false
         stackWidth.isActive = true
-        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Dismiss meeting cue")
+        closeButton.image = NSImage(systemSymbolName: "xmark", accessibilityDescription: "Close meeting info and cues")
         closeButton.bezelStyle = .circular
         closeButton.isBordered = true
         closeButton.target = self
         closeButton.action = #selector(closeSplash)
-        closeButton.setAccessibilityLabel("Dismiss meeting cue")
+        closeButton.setAccessibilityLabel("Close meeting info and cues")
         closeButton.toolTip = "Dismiss (Escape after clicking the splash)"
         addSubview(closeButton)
     }
@@ -201,7 +208,7 @@ private final class SplashArtworkView: NSView {
             image.image = CueMedia.image(named: name, isEnd: isEnd, bundle: bundle)
             image.imageScaling = .scaleProportionallyUpOrDown
             image.identifier = NSUserInterfaceItemIdentifier(name ?? (isEnd ? "wrap-wrap" : "meet-meet"))
-            image.setAccessibilityLabel(isEnd ? "Meeting ends soon" : "Meeting starts soon")
+            image.setAccessibilityLabel(isEnd ? "Meeting ends soon" : "Meeting info")
             stack.addArrangedSubview(image)
             let size = image.image?.size ?? NSSize(width: 600, height: 400)
             image.widthAnchor.constraint(equalToConstant: availableWidth).isActive = true
@@ -218,7 +225,7 @@ private final class SplashArtworkView: NSView {
                                 width: availableWidth)
                     }
                     if let url = meeting.meetingURL {
-                        let button = MeetingLinkButton(url: url)
+                        let button = MeetingLinkButton(url: url, openURL: openURL, joined: { [weak self] in self?.dismiss?() })
                         stack.addArrangedSubview(button)
                     }
                 }
@@ -242,19 +249,27 @@ private final class SplashArtworkView: NSView {
 
 private final class MeetingLinkButton: NSButton {
     private let url: URL
-    init(url: URL) {
+    private let openURL: (URL) -> Bool
+    private let joined: () -> Void
+    init(url: URL, openURL: @escaping (URL) -> Bool, joined: @escaping () -> Void) {
         self.url = url
+        self.openURL = openURL
+        self.joined = joined
         super.init(frame: .zero)
-        title = "Open meeting"
+        title = "Join"
+        image = NSImage(systemSymbolName: "video.fill", accessibilityDescription: "Video camera")
+        imagePosition = .imageLeading
         bezelStyle = .rounded
         target = self
         action = #selector(openMeeting)
         toolTip = url.absoluteString
-        setAccessibilityLabel("Open meeting in default app")
+        setAccessibilityLabel("Join meeting in default app")
     }
     required init?(coder: NSCoder) { return nil }
     @objc private func openMeeting() {
-        if !NSWorkspace.shared.open(url) {
+        if openURL(url) {
+            joined()
+        } else {
             let alert = NSAlert()
             alert.messageText = "Could not open meeting"
             alert.informativeText = "No application could open this meeting link."

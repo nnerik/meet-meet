@@ -93,6 +93,56 @@ func nativeHUDCannotBecomeKeyOrMainAndConstructionDoesNotActivateIt() throws {
 }
 
 @Test @MainActor
+func nativeHUDClickOpensTheCorrectRowIncludingAfterScrollingWithoutMovingTheStack() async throws {
+    let application = NSApplication.shared
+    let state = AppState(storage: NativeHUDMemoryStore())
+    try state.setSelectedCalendarIDs(["fixture"])
+    let session = CalendarSession(reader: NativeHUDCalendarFixture(count: 30), state: state)
+    await session.refresh()
+    let before = Set(application.windows.map { ObjectIdentifier($0) })
+    var opened: [OccurrenceKey] = []
+    let controller = CountdownHUDController(state: state, session: session, showMeetingInfo: { opened.append($0) })
+    let window = try #require(application.windows.first {
+        !before.contains(ObjectIdentifier($0)) && $0.identifier?.rawValue == "meetmeet.countdownHUD"
+    })
+    defer { controller.stop(); window.close() }
+    controller.start()
+    let content = try #require(window.contentView)
+    let scroll = try #require(content.subviews.compactMap { $0 as? NSScrollView }.first)
+    let document = try #require(scroll.documentView)
+    let frame = window.frame
+    let previousKey = application.keyWindow
+    func event(_ type: NSEvent.EventType, at point: NSPoint) throws -> NSEvent {
+        try #require(NSEvent.mouseEvent(with: type, location: point, modifierFlags: [], timestamp: 0,
+                                       windowNumber: window.windowNumber, context: nil,
+                                       eventNumber: 0, clickCount: 1, pressure: 0))
+    }
+    let first = document.convert(NSPoint(x: document.bounds.midX, y: HUDLayoutPolicy.rowHeight / 2), to: nil)
+    content.mouseDown(with: try event(.leftMouseDown, at: first))
+    #expect(opened.isEmpty)
+    content.mouseUp(with: try event(.leftMouseUp, at: first))
+    #expect(opened == [session.presentation.hudRows[0].id])
+    #expect(window.frame == frame)
+    #expect(state.hudPosition == nil)
+    #expect(application.keyWindow === previousKey)
+
+    scroll.contentView.scroll(to: NSPoint(x: 0, y: HUDLayoutPolicy.rowHeight * 2))
+    scroll.reflectScrolledClipView(scroll.contentView)
+    let third = document.convert(NSPoint(x: document.bounds.midX, y: HUDLayoutPolicy.rowHeight * 2.5), to: nil)
+    content.mouseDown(with: try event(.leftMouseDown, at: third))
+    content.mouseUp(with: try event(.leftMouseUp, at: third))
+    #expect(opened.last == session.presentation.hudRows[2].id)
+    let count = opened.count
+    content.mouseDown(with: try event(.leftMouseDown, at: third))
+    content.mouseUp(with: try event(.leftMouseUp, at: NSPoint(x: third.x + 10, y: third.y)))
+    #expect(opened.count == count) // Movement must not turn into a click.
+    content.mouseDown(with: try event(.leftMouseDown, at: third))
+    controller.stop()
+    content.mouseUp(with: try event(.leftMouseUp, at: third))
+    #expect(opened.count == count)
+}
+
+@Test @MainActor
 func nativeHUDAppearsScrollsAndReactsToPauseWithoutTakingFocus() async throws {
     let application = NSApplication.shared
     let screen = try #require(NSScreen.screens.first)
@@ -468,7 +518,9 @@ func nativeSplashIsCenteredPassiveAppearanceIndependentAndDismissable() async th
     let image = try #require(views.compactMap { $0 as? NSImageView }.first)
     #expect(views.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Splash fixture" })
     #expect(views.compactMap { $0 as? NSTextField }.contains { $0.stringValue == rawLocation })
-    #expect(views.compactMap { $0 as? NSButton }.contains { $0.title == "Open meeting" })
+    let join = try #require(views.compactMap { $0 as? NSButton }.first { $0.title == "Join" })
+    #expect(join.image != nil)
+    #expect(join.imagePosition == .imageLeading)
     #expect(image.frame.height > 100)
     #expect(window.frame.height > image.frame.height)
     window.appearance = NSAppearance(named: .aqua)
@@ -510,6 +562,9 @@ func nativeSplashIsCenteredPassiveAppearanceIndependentAndDismissable() async th
     cues.update(occurrences: [final], isActive: true, at: now)
     #expect(await waitForHUD { window.isVisible })
     cues.update(occurrences: [final], isActive: true, at: final.start)
+    #expect(cues.infoMeetings == [final])
+    #expect(window.isVisible)
+    cues.update(occurrences: [final], isActive: true, at: final.end)
     #expect(await waitForHUD { !window.isVisible })
     cues.update(occurrences: [meeting], isActive: true, at: meeting.end.addingTimeInterval(-120))
     #expect(await waitForHUD { window.isVisible })
@@ -517,7 +572,7 @@ func nativeSplashIsCenteredPassiveAppearanceIndependentAndDismissable() async th
     #expect(endViews.compactMap { $0 as? NSImageView }.first?.identifier?.rawValue == "wrap-wrap")
     #expect(endViews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == "Splash fixture" })
     #expect(!endViews.compactMap { $0 as? NSTextField }.contains { $0.stringValue == rawLocation })
-    #expect(!endViews.compactMap { $0 as? NSButton }.contains { $0.title == "Open meeting" })
+    #expect(!endViews.compactMap { $0 as? NSButton }.contains { $0.title == "Join" })
     cues.update(occurrences: [meeting], isActive: true, at: meeting.end)
     #expect(await waitForHUD { !window.isVisible })
 
@@ -537,5 +592,43 @@ func nativeSplashIsCenteredPassiveAppearanceIndependentAndDismissable() async th
     close.performClick(nil)
     #expect(state.dismissedSplashCues.contains(next.key))
     #expect(state.dismissedEndSplashCues.contains(meeting.key))
+}
+
+@Test(arguments: [false, true]) @MainActor
+func nativeJoinClosesInfoWithoutConsumingAFutureManualCue(manual: Bool) async throws {
+    let application = NSApplication.shared
+    let state = AppState(storage: NativeHUDMemoryStore())
+    try state.setSelectedCalendarIDs(["fixture"])
+    let session = SplashCueSession(state: state)
+    let before = Set(application.windows.map { ObjectIdentifier($0) })
+    var opened: [URL] = []
+    let controller = SplashHUDController(session: session, openURL: { url in opened.append(url); return true })
+    let window = try #require(application.windows.first {
+        !before.contains(ObjectIdentifier($0)) && $0.identifier?.rawValue == "meetmeet.splashHUD"
+    })
+    defer { controller.stop(); window.close() }
+    controller.start()
+    let now = Date()
+    let url = try #require(URL(string: "https://meet.google.com/abc-defg-hij"))
+    let meeting = MeetingOccurrence(id: "join", calendarID: "fixture", title: "Join fixture",
+                                    start: now.addingTimeInterval(manual ? 300 : 30),
+                                    end: now.addingTimeInterval(900), url: url)
+    session.update(occurrences: [meeting], isActive: true, at: now)
+    if manual { session.showMeetingInfo(for: meeting.key) }
+    #expect(await waitForHUD { window.isVisible })
+    func descendants(_ view: NSView) -> [NSView] { view.subviews.flatMap { [$0] + descendants($0) } }
+    let content = try #require(window.contentView)
+    let join = try #require(descendants(content).compactMap { $0 as? NSButton }.first { $0.title == "Join" })
+    join.performClick(nil)
+    #expect(opened == [url])
+    #expect(!window.isVisible)
+    #expect(session.infoMeetings.isEmpty)
+    #expect(state.dismissedSplashCues == (manual ? [] : [meeting.key]))
+    session.update(occurrences: [meeting], isActive: true, at: now)
+    #expect(session.infoMeetings.isEmpty)
+    if manual {
+        session.update(occurrences: [meeting], isActive: true, at: meeting.start.addingTimeInterval(-60))
+        #expect(await waitForHUD { window.isVisible })
+    }
 }
 #endif

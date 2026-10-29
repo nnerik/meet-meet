@@ -45,7 +45,7 @@ public final class MeetingSession {
 
     public func refresh() async {
         audioCues.reset()
-        splashCues.reset()
+        splashCues.suspend()
         await calendarSession.refresh()
         if running { renewObservation() }
     }
@@ -67,6 +67,16 @@ public final class MeetingSession {
         tick()
     }
 
+    public func showMeetingInfo(for key: OccurrenceKey) {
+        guard running, !sleeping else { return }
+        // A click can race a boundary, removal, pause or refresh. Resolve it
+        // against the current live HUD rather than a captured source snapshot.
+        tick()
+        guard calendarSession.status == .ready, !calendarSession.isPaused,
+              presentation.hudRows.contains(where: { $0.id == key }) else { return }
+        splashCues.showMeetingInfo(for: key)
+    }
+
     public func setSleeping(_ sleeping: Bool) {
         self.sleeping = sleeping
         audioCues.reset()
@@ -76,7 +86,7 @@ public final class MeetingSession {
 
     public func invalidate() {
         audioCues.reset()
-        splashCues.reset()
+        splashCues.suspend()
         calendarSession.invalidate()
     }
 
@@ -85,9 +95,13 @@ public final class MeetingSession {
         audioCues.update(occurrences: calendarSession.reminderOccurrences,
                          isActive: calendarSession.status == .ready && !calendarSession.isPaused,
                           at: calendarSession.now)
-        splashCues.update(occurrences: calendarSession.reminderOccurrences,
-                         isActive: calendarSession.status == .ready && !calendarSession.isPaused,
-                         at: calendarSession.now)
+        if calendarSession.status == .refreshing && !calendarSession.isPaused {
+            splashCues.suspend()
+        } else {
+            splashCues.update(occurrences: calendarSession.reminderOccurrences,
+                              isActive: calendarSession.status == .ready && !calendarSession.isPaused,
+                              at: calendarSession.now)
+        }
     }
 
     private func renewObservation() {

@@ -41,7 +41,8 @@ leaves the menu/audio eligibility intact and removes only that meeting's HUD row
 
 Relevant meetings appear in one lower-right floating stack: bell for upcoming,
 play for ongoing, with a Reduce Motion-aware pulse during the final minute.
-Hover to reveal all titles, drag to move the entire stack, or scroll when rows
+Click a row to open meeting info for an upcoming or ongoing meeting, hover to
+reveal all titles, drag to move the entire stack, or scroll when rows
 exceed screen height. New/restored rows reveal titles for three elapsed seconds;
 reordering alone does not. The stack grows upward from its lower-right anchor.
 Dragged position is saved relative to the display's usable lower-right corner,
@@ -56,16 +57,29 @@ before-end sections. Visual cues default on one minute before start and two
 minutes before end (each configurable from 1–60 minutes), centered on the primary
 display. Default artwork is `meet-meet.png` for start and `wrap-wrap.png` for end,
 independent of system appearance; each can be replaced with an imported image.
-Start cues include the title, available location and an **Open meeting** button
-for an available link, opened in its default app. Conferencing links in event
+Start cues automatically open meeting info: the title, available location and a
+camera-icon **Join** button for an available link, opened in its default app.
+Successful joining closes the info panel so it does not obscure the meeting;
+failed opening keeps it available with an error. Conferencing links in event
 locations and notes are recognized, including Google Meet. End cues show only the
 title. Close with **×**, or click the artwork then press **Escape**; presentation
-does not take keyboard focus. Each cue disappears at its phase boundary. Manual
-dismissals survive restart independently for start and end. Overlapping reminders
+does not take keyboard focus. Meeting info stays through meeting start until
+closed or the meeting ends; end visuals close at meeting end. Cue dismissals
+survive restart independently for start and end. Overlapping reminders
 share one scrollable panel without losing meeting details. Launch/wake/resume
 catches up inside either visual cue interval, but end visuals never appear before
 the meeting starts. Pause and hidden meetings suppress both; temporary countdown
 hiding and the regular HUD's lead time do not affect them.
+
+HUD clicks open the same meeting info even with visual cues disabled or already
+dismissed. Manually opening or closing info does not consume a future cue. A newly
+due visual cue raises the panel even if manual info is still open, without
+activating the app. Once an automatic cue has presented, closing the panel
+dismisses that cue normally. Manual-only opens do not write cue history. Open info
+is temporarily hidden during calendar refresh and restored from fresh eligible
+data, including after meeting start; it is cleared on pause, access loss, removal,
+hiding or meeting end. Dragging does not open info, and scrolling is accounted for
+when resolving a clicked row. Screen readers can invoke the row's open action too.
 
 **Settings → General → Meeting locations → Shorten meeting room names** is
 off by default and supports only Google Workspace structured room names. For

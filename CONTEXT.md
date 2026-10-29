@@ -33,5 +33,12 @@ A recurring series excluded from meeting entries, countdowns, and sounds within 
 **Countdown phase**:
 The upcoming interval counting toward a meeting's start, or the ongoing interval counting toward its end.
 
+**Meeting info**:
+A meeting's title, available location and video-meeting join link, available for both upcoming and ongoing meetings. Opening meeting info manually is distinct from its automatic start visual cue.
+_Avoid_: Using “pre-meeting splash” to imply meeting info is only available before start.
+
+**Start visual cue**:
+An automatic reminder that presents meeting info at the configured interval before a meeting starts. A manually opened meeting info screen does not consume or dismiss this reminder.
+
 **Hide countdown until final minute**:
 A temporary suppression of one meeting's HUD row until the final 60 seconds of its current countdown phase. Its menu entry and configured sounds remain available; this is distinct from hiding the occurrence or series.

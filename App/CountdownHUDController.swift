@@ -13,6 +13,7 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
     private let model: HUDViewModel
     private let panel: CountdownPanel
     private let content: HUDInteractionView
+    private let meetingInfoRequested: (OccurrenceKey) -> Void
     private var reveal = HUDRevealState()
     private var revealTask: Task<Void, Never>?
     private var observers: Set<AnyCancellable> = []
@@ -42,9 +43,10 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         return Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
     }
 
-    init(state: AppState, session: CalendarSession) {
+    init(state: AppState, session: CalendarSession, showMeetingInfo: @escaping (OccurrenceKey) -> Void = { _ in }) {
         self.state = state
         self.session = session
+        meetingInfoRequested = showMeetingInfo
         let placement = HUDPlacementSession(state: state)
         self.placement = placement
         let model = HUDViewModel(placement: placement)
@@ -73,6 +75,14 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         content.hoverChanged = { [weak self] hovering in self?.hoverChanged(hovering) }
         content.dragBegan = { [weak self] in self?.beginViewDrag() }
         content.dragEnded = { [weak self] in self?.endViewDrag() }
+        model.showMeetingInfo = { [weak self] key in self?.openMeetingInfo(for: key) }
+    }
+
+    private func openMeetingInfo(for key: OccurrenceKey) {
+        guard running, panel.isVisible else { return }
+        synchronize()
+        guard model.rows.contains(where: { $0.id == key }) else { return }
+        meetingInfoRequested(key)
     }
 
     func start() {
@@ -237,6 +247,7 @@ private final class HUDViewModel {
     init(placement: HUDPlacementSession) { self.placement = placement }
 
     var cueWiggles: [OccurrenceKey: UUID] = [:]
+    var showMeetingInfo: ((OccurrenceKey) -> Void)?
     var rows: [CountdownRow] = []
     var expanded = false
     var timerWidth = 82.0
@@ -276,7 +287,9 @@ private struct CountdownRowsView: View {
                 .accessibilityElement(children: .ignore)
                 .accessibilityLabel(row.title)
                 .accessibilityValue(row.accessibilityValue)
-                .accessibilityHint(model.positionError ?? "Drag the stack to move it. Meeting actions are in the calendar menu.")
+                .accessibilityHint(model.positionError ?? "Click to show meeting info. Drag the stack to move it.")
+                .accessibilityAddTraits(.isButton)
+                .accessibilityAction { model.showMeetingInfo?(row.id) }
             }
         }
         .frame(width: model.documentWidth, alignment: .topTrailing)
@@ -312,12 +325,17 @@ private final class HUDInteractionView: NSView {
     let scrollView = NSScrollView()
     private let background = NSHostingView(rootView: HUDBackgroundView())
     private let document: NSHostingView<CountdownRowsView>
+    private let model: HUDViewModel
+    private var pressedMeeting: OccurrenceKey?
+    private var clickOrigin: NSPoint?
+    private var mouseDownEvent: NSEvent?
     private var hoverTracking: NSTrackingArea?
     var hoverChanged: ((Bool) -> Void)?
     var dragBegan: (() -> Void)?
     var dragEnded: (() -> Void)?
 
     init(model: HUDViewModel) {
+        self.model = model
         document = NSHostingView(rootView: CountdownRowsView(model: model))
         super.init(frame: .zero)
         wantsLayer = true
@@ -394,11 +412,39 @@ private final class HUDInteractionView: NSView {
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
+        pressedMeeting = meeting(at: event.locationInWindow)
+        clickOrigin = event.locationInWindow
+        mouseDownEvent = event
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let origin = clickOrigin, let down = mouseDownEvent,
+              hypot(event.locationInWindow.x - origin.x, event.locationInWindow.y - origin.y) >= 4 else { return }
+        pressedMeeting = nil
+        clickOrigin = nil
+        mouseDownEvent = nil
         dragBegan?()
         NSCursor.closedHand.push()
-        window?.performDrag(with: event)
-        NSCursor.pop()
-        dragEnded?()
+        defer { NSCursor.pop(); dragEnded?() }
+        window?.performDrag(with: down)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        defer { pressedMeeting = nil; clickOrigin = nil; mouseDownEvent = nil }
+        guard let key = pressedMeeting, let origin = clickOrigin,
+              hypot(event.locationInWindow.x - origin.x, event.locationInWindow.y - origin.y) < 4,
+              meeting(at: event.locationInWindow) == key else { return }
+        model.showMeetingInfo?(key)
+    }
+
+    private func meeting(at windowPoint: NSPoint) -> OccurrenceKey? {
+        let clipPoint = scrollView.contentView.convert(windowPoint, from: nil)
+        guard scrollView.contentView.bounds.contains(clipPoint) else { return nil }
+        let point = document.convert(windowPoint, from: nil)
+        guard document.bounds.contains(point) else { return nil }
+        let index = Int(floor(point.y / HUDLayoutPolicy.rowHeight))
+        guard model.rows.indices.contains(index) else { return nil }
+        return model.rows[index].id
     }
 
     override func scrollWheel(with event: NSEvent) { scrollView.scrollWheel(with: event) }

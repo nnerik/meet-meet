@@ -110,6 +110,70 @@ private func liveMeeting(_ id: String = "one", start: TimeInterval, end: TimeInt
     #expect(player.sounds == ["meet-meet", "wrap-wrap"])
 }
 
+@Test @MainActor func liveHUDInfoOpeningDoesNotConsumeAudioOrVisualCuesAndSurvivesStartRefresh() async throws {
+    let state = try liveState()
+    let event = liveMeeting(start: 120, end: 600)
+    let clock = LiveClock()
+    let player = LiveSoundPlayer()
+    let live = MeetingSession(reader: LiveCalendarReader([event]), state: state, player: player,
+                              clock: clock, calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    live.showMeetingInfo(for: event.key)
+    #expect(live.splashCues.infoMeetings == [event])
+    live.splashCues.dismiss()
+    #expect(state.handledCues.isEmpty && state.dismissedSplashCues.isEmpty)
+    for second in 1...60 {
+        clock.set(liveNow.addingTimeInterval(Double(second)))
+        live.tick()
+    }
+    #expect(live.splashCues.infoMeetings == [event])
+    for second in 61...120 {
+        clock.set(liveNow.addingTimeInterval(Double(second)))
+        live.tick()
+    }
+    #expect(player.sounds == ["meet-meet"])
+    #expect(live.splashCues.infoMeetings == [event])
+    await live.refresh()
+    #expect(live.splashCues.infoMeetings == [event])
+    live.splashCues.dismiss()
+    #expect(live.splashCues.infoMeetings.isEmpty)
+    live.showMeetingInfo(for: event.key)
+    #expect(live.splashCues.infoMeetings == [event])
+    #expect(player.sounds == ["meet-meet"])
+}
+
+@Test @MainActor func liveMeetingInfoClicksRejectStaleHiddenPausedAndSuppressedHUDRows() async throws {
+    let state = try liveState()
+    try state.updatePreferences { $0.splashCueEnabled = false; $0.endSplashCueEnabled = false }
+    let event = liveMeeting(start: 300, end: 900)
+    let reader = LiveCalendarReader([event])
+    let live = MeetingSession(reader: reader, state: state, player: LiveSoundPlayer(),
+                              clock: LiveClock(), calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    live.showMeetingInfo(for: event.key)
+    #expect(live.splashCues.infoMeetings == [event])
+    live.splashCues.dismiss()
+    try live.performReminderAction(.suppressCountdown, for: event.key)
+    live.showMeetingInfo(for: event.key)
+    #expect(live.splashCues.infoMeetings.isEmpty)
+    try live.performReminderAction(.restoreCountdown, for: event.key)
+    try live.calendarSession.pauseForToday()
+    live.showMeetingInfo(for: event.key)
+    #expect(live.splashCues.infoMeetings.isEmpty)
+    try live.calendarSession.resume()
+    try live.performReminderAction(.hideOccurrence, for: event.key)
+    live.showMeetingInfo(for: event.key)
+    #expect(live.splashCues.infoMeetings.isEmpty)
+    await reader.setEvents([])
+    await live.refresh()
+    live.showMeetingInfo(for: event.key)
+    #expect(live.splashCues.infoMeetings.isEmpty)
+}
+
 @Test @MainActor func liveSplashRespectsPauseAndHiddenMeetingsButNotTemporaryHUDSuppression() async throws {
     let state = try liveState()
     try state.updatePreferences { $0.hudLeadMinutes = 0; $0.splashLeadMinutes = 2 }

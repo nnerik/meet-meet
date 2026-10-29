@@ -22,12 +22,14 @@ while you're working, and a more obvious nudge when it's time to join.
 ## Before the meeting. During the meeting.
 
 - **See what's coming.** A floating countdown sits in the lower-right corner.
-  Hover to reveal meeting titles, or drag the whole stack somewhere else.
+  Hover to reveal meeting titles, click a row to open meeting info, or drag the
+  whole stack somewhere else.
 - **Keep an eye on the finish line.** When a meeting starts, its countdown
   switches to time remaining so you know when to wrap up.
 - **Get a final nudge.** Dismissable visual cues appear one minute before start
-  and two minutes before end by default. Start cues show the title, location and
-  an available meeting link; end cues show the title. Configure timing, optional
+  and two minutes before end by default. Start cues open meeting info with the
+  title, location and a camera-icon **Join** button when a video link is available.
+  Info stays open through meeting start; end cues show the title. Configure timing, optional
   sounds, and your own audio or images in **Settings → Cues**.
 - **Stay in control.** Hide meetings or recurring series you don't need reminders
   for, temporarily hide a countdown, or use **Pause for Today**.

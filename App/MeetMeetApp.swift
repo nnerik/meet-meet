@@ -22,12 +22,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let navigation = SettingsNavigation()
     private let login = LoginLaunchSession(service: LoginLaunchService())
     private lazy var setup = OnboardingSession(state: state)
-    private lazy var live = MeetingSession(reader: EventKitCalendarReader(), state: state, player: SystemSoundPlayer(), cueHandled: { [weak self] cues in
+    private lazy var live: MeetingSession = MeetingSession(reader: EventKitCalendarReader(), state: state, player: SystemSoundPlayer(), cueHandled: { [weak self] cues in
         self?.hud.showCueWiggles(for: cues.map(\.occurrence))
     })
     private var session: CalendarSession { live.calendarSession }
     private var audioCues: AudioCueSession { live.audioCues }
-    private lazy var hud = CountdownHUDController(state: state, session: session)
+    private lazy var hud: CountdownHUDController = CountdownHUDController(state: state, session: session, showMeetingInfo: { [weak self] key in
+        self?.live.showMeetingInfo(for: key)
+    })
     private lazy var splash = SplashHUDController(session: live.splashCues)
     private var statusItem: NSStatusItem?
     private var settingsWindow: NSWindow?
@@ -337,7 +339,7 @@ private struct SettingsView: View {
                 Slider(value: preference(\.audioVolume), in: 0...1) { Text("App volume") }
                 Text("Zero-minute offsets mean the meeting boundary. App volume does not change system volume. Missed cues are skipped after interruptions; sounds are best-effort while the app is running.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Visual cues appear on the primary display until dismissed or their meeting boundary is reached. Close with ×, or click the artwork then press Escape. They do not interrupt typing. Imported files are copied into Meet Meet; the originals can be moved or removed.")
+                Text("Start visual cues open meeting info, which stays open through the start until dismissed or the meeting ends. Click any HUD meeting to open its info without consuming the scheduled cue. End visual cues close at meeting end. Close with ×, or click the artwork then press Escape. Cues do not interrupt typing. Imported files are copied into Meet Meet; the originals can be moved or removed.")
                     .font(.caption).foregroundStyle(.secondary)
                 if let error = audioCues.errorMessage {
                     Label(error, systemImage: "exclamationmark.triangle").font(.callout)
@@ -399,7 +401,7 @@ private struct SettingsView: View {
             Text("Meeting title").font(.title2.bold())
             if !isEnd {
                 Text("Meeting location (when available)")
-                Button("Open meeting") {}.disabled(true)
+                Button("Join", systemImage: "video.fill") {}.disabled(true)
                 Text("Opens the meeting link in its default app when available.").font(.caption)
             }
             Button("Done") { previewEnd = nil }.keyboardShortcut(.cancelAction)

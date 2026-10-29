@@ -214,3 +214,132 @@ private func splashMeeting(_ id: String = "one", startsIn: TimeInterval = 60, ca
     #expect(MeetingLink.resolve(url: URL(string: "javascript:alert(1)"), location: nil) == nil)
     #expect(MeetingLink.resolve(url: URL(string: "zoommtg://zoom.us/join?confno=123"), location: nil) != nil)
 }
+
+@Test @MainActor func automaticallyPresentedMeetingInfoStaysThroughStartUntilEnd() throws {
+    let state = try splashState()
+    try state.updatePreferences { $0.endSplashCueEnabled = false }
+    let session = SplashCueSession(state: state)
+    let event = splashMeeting()
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    #expect(session.infoMeetings == [event])
+    let revision = session.presentationRevision
+    session.update(occurrences: [event], isActive: true, at: event.start)
+    #expect(session.meetings.isEmpty)
+    #expect(session.infoMeetings == [event])
+    #expect(session.presentationRevision == revision)
+    session.update(occurrences: [event], isActive: true, at: event.end)
+    #expect(session.infoMeetings.isEmpty)
+
+    let lateLaunch = SplashCueSession(state: state)
+    lateLaunch.update(occurrences: [event], isActive: true, at: event.start)
+    #expect(lateLaunch.infoMeetings.isEmpty) // No new start cue for an ongoing meeting.
+}
+
+@Test @MainActor func manuallyOpeningAndClosingInfoDoesNotConsumeFutureVisualOrAudioCues() throws {
+    let store = SplashStorage()
+    let state = try splashState(store)
+    let session = SplashCueSession(state: state)
+    let event = splashMeeting(startsIn: 300)
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    let writes = store.writes
+    session.showMeetingInfo(for: event.key)
+    #expect(session.infoMeetings == [event])
+    #expect(session.meetings.isEmpty)
+    session.dismiss()
+    #expect(session.infoMeetings.isEmpty)
+    #expect(state.dismissedSplashCues.isEmpty && state.dismissedEndSplashCues.isEmpty && state.handledCues.isEmpty)
+    #expect(store.writes == writes)
+    session.update(occurrences: [event], isActive: true, at: event.start.addingTimeInterval(-60))
+    #expect(session.meetings == [event])
+    #expect(session.infoMeetings == [event])
+    session.dismiss()
+    #expect(state.dismissedSplashCues == [event.key])
+}
+
+@Test @MainActor func automaticCueRaisesInfoEvenWhenManuallyOpenedAndStillVisible() throws {
+    let session = SplashCueSession(state: try splashState())
+    let event = splashMeeting(startsIn: 300)
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    session.showMeetingInfo(for: event.key)
+    let manualRevision = session.presentationRevision
+    session.update(occurrences: [event], isActive: true, at: event.start.addingTimeInterval(-60))
+    #expect(session.infoMeetings == [event])
+    #expect(session.presentationRevision > manualRevision)
+    let cueRevision = session.presentationRevision
+    session.update(occurrences: [event], isActive: true, at: event.start.addingTimeInterval(-59))
+    #expect(session.presentationRevision == cueRevision)
+}
+
+@Test @MainActor func manuallyOpenedOngoingInfoWorksWithDisabledOrDismissedCues() throws {
+    let state = try splashState()
+    try state.updatePreferences { $0.splashCueEnabled = false; $0.endSplashCueEnabled = false }
+    let session = SplashCueSession(state: state)
+    let event = splashMeeting(startsIn: -60)
+    try state.setDismissedSplashCues([event.key])
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    session.showMeetingInfo(for: event.key)
+    #expect(session.infoMeetings == [event])
+    #expect(session.meetings.isEmpty && session.endMeetings.isEmpty)
+    session.dismiss()
+    #expect(state.dismissedSplashCues == [event.key])
+    #expect(state.dismissedEndSplashCues.isEmpty)
+    session.showMeetingInfo(for: event.key)
+    #expect(session.infoMeetings.isEmpty) // Reset discards the stale available snapshot.
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    session.showMeetingInfo(for: event.key)
+    #expect(session.infoMeetings == [event])
+}
+
+@Test @MainActor func refreshRestoresOpenMeetingInfoAcrossStartUsingFreshSnapshots() throws {
+    let session = SplashCueSession(state: try splashState())
+    let event = splashMeeting()
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    session.suspend()
+    #expect(session.infoMeetings.isEmpty)
+    session.showMeetingInfo(for: event.key)
+    #expect(session.infoMeetings.isEmpty)
+    let edited = MeetingOccurrence(id: event.id, calendarID: event.calendarID, title: "Edited",
+                                   start: event.start, end: event.end, location: "New room")
+    session.update(occurrences: [edited], isActive: true, at: event.start)
+    #expect(session.infoMeetings == [edited])
+    session.update(occurrences: [], isActive: true, at: event.start)
+    #expect(session.infoMeetings.isEmpty)
+    session.update(occurrences: [edited], isActive: true, at: event.start)
+    #expect(session.infoMeetings.isEmpty) // A removed meeting is not silently reopened.
+}
+
+@Test @MainActor func infoDismissalAfterStartPersistsOnlyTheAlreadyPresentedStartCue() throws {
+    let state = try splashState()
+    let session = SplashCueSession(state: state)
+    let event = splashMeeting()
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    session.update(occurrences: [event], isActive: true, at: event.start)
+    session.dismiss()
+    #expect(state.dismissedSplashCues == [event.key])
+    #expect(state.dismissedEndSplashCues.isEmpty)
+    session.update(occurrences: [event], isActive: true, at: event.end.addingTimeInterval(-120))
+    #expect(session.endMeetings == [event])
+}
+
+@Test @MainActor func meetingInfoRejectsInactiveAmbiguousHiddenAndEndedSnapshots() throws {
+    let state = try splashState()
+    let session = SplashCueSession(state: state)
+    let event = splashMeeting(startsIn: -60)
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    session.showMeetingInfo(for: event.key)
+    #expect(session.infoMeetings == [event])
+    session.update(occurrences: [event], isActive: false, at: splashNow)
+    session.showMeetingInfo(for: event.key)
+    #expect(session.infoMeetings.isEmpty)
+    session.update(occurrences: [event, event], isActive: true, at: splashNow)
+    session.showMeetingInfo(for: event.key)
+    #expect(session.infoMeetings.isEmpty)
+    try state.setSelectedCalendarIDs([])
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    session.showMeetingInfo(for: event.key)
+    #expect(session.infoMeetings.isEmpty)
+    try state.setSelectedCalendarIDs([event.calendarID])
+    session.update(occurrences: [event], isActive: true, at: event.end)
+    session.showMeetingInfo(for: event.key)
+    #expect(session.infoMeetings.isEmpty)
+}
