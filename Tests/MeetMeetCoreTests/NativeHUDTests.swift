@@ -22,10 +22,13 @@ private actor UnusedHUDCalendar: CalendarReading {
     func occurrences(in interval: DateInterval, calendarIDs: Set<String>) -> [MeetingOccurrence] { [] }
 }
 
+private struct NativeHUDFixedClock: AppClock {
+    let now: Date
+}
+
 private actor NativeHUDCalendarFixture: CalendarReading {
     var events: [MeetingOccurrence]
-    init(count: Int) {
-        let now = Date()
+    init(count: Int, now: Date = Date()) {
         events = (0..<count).map { index in
             MeetingOccurrence(id: "native-fixture-\(index)", calendarID: "fixture", title: "Native HUD fixture \(index + 1)",
                               start: now.addingTimeInterval(120), end: now.addingTimeInterval(600))
@@ -453,7 +456,11 @@ func nativeHUDExposesMeetingRowsInTheApplicationAccessibilityTree() async throws
     defer { application.accessibilitySetValue(wasEnhanced, forAttribute: enhancedUI) }
     let state = AppState(storage: NativeHUDMemoryStore())
     try state.setSelectedCalendarIDs(["fixture"])
-    let session = CalendarSession(reader: NativeHUDCalendarFixture(count: 1), state: state)
+    // Pin both event construction and reconciliation to the same instant.
+    // Slow fetches/AX setup must not consume seconds from this speech fixture.
+    let now = Date(timeIntervalSince1970: 1_800_000_000)
+    let reader = NativeHUDCalendarFixture(count: 1, now: now)
+    let session = CalendarSession(reader: reader, state: state, clock: NativeHUDFixedClock(now: now))
     await session.refresh()
     let before = Set(application.windows.map { ObjectIdentifier($0) })
     let controller = CountdownHUDController(state: state, session: session)
