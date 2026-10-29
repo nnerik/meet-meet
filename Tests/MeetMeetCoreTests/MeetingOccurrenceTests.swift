@@ -67,6 +67,14 @@ func calendarBoundary() async throws {
     ("HQ-3A-2-Boardroom", "Boardroom"),
     ("HQ-3-Board-Room-2 (8) [VC]", "Board-Room-2"),
     ("  HQ-02-会議室 (8) [Google Meet]  ", "会議室"),
+    ("HQ-3-Boardroom, HQ-4-Lounge", "Boardroom, Lounge"),
+    ("HQ-3-Boardroom (16) [Google Meet, TV], HQ-4-Lounge (8) [VC, TV]", "Boardroom, Lounge"),
+    ("HQ-3-Boardroom, Remote", "Boardroom, Remote"),
+    ("Remote, HQ-4-Lounge", "Remote, Lounge"),
+    ("HQ-3-Boardroom,HQ-4-Lounge", "Boardroom,Lounge"),
+    ("(Microscope, TV) HQ-3-Laboratory, HQ-4-Lounge", "Laboratory, Lounge"),
+    ("HQ-3-Boardroom, , HQ-4-Lounge,", "Boardroom, , Lounge,"),
+    ("us-nyc2-office-3-🚀 Rocket Room (2), us-nyc1-office-3-340 - Quiet Corner (2) [Google Meet, TV]", "🚀 Rocket Room, 340 - Quiet Corner"),
 ])
 func googleWorkspaceLocationsShortenToRoomNames(location: String, expected: String) {
     #expect(GoogleLocationShortener.shorten(location: location) == expected)
@@ -79,6 +87,7 @@ func googleWorkspaceLocationsShortenToRoomNames(location: String, expected: Stri
     "(Microscope) Laboratory (2)", "HQ-second-Boardroom [VC]",
     "HQ-3- (16) [VC]", "HQ-3-", "https://meet.google.com/abc-defg-hij",
     "123 Main Street", "Room [VC]", "Building / Floor 3 / Boardroom",
+    "  Remote, 123 Main Street  ", "Boardroom [Google Meet, TV], Remote",
 ])
 func nonmatchingOrEmptyGoogleRoomNamesRemainUntouched(location: String) {
     #expect(GoogleLocationShortener.shorten(location: location) == location)
