@@ -355,7 +355,7 @@ private struct SettingsView: View {
         return Section(isEnd ? "Before end" : "Before start") {
             Toggle("Audio cue", isOn: preference(audioKey.appending(path: \.isEnabled)))
             Picker("Sound", selection: preference(audioKey.appending(path: \.soundName))) {
-                ForEach(SystemSoundPlayer.soundNames(isEnd: isEnd, selectedNames: [state.preferences.startCue.soundName, state.preferences.endCue.soundName]), id: \.self) {
+                ForEach(SystemSoundPlayer.soundNames(for: isEnd ? .end : .start, selectedNames: [state.preferences.startCue.soundName, state.preferences.endCue.soundName]), id: \.self) {
                     Text(CueMedia.label(for: $0)).tag($0)
                 }
             }

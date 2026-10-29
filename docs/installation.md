@@ -39,7 +39,7 @@ Download the matching `.dmg.sha256` asset into the same folder as the DMG, then
 run this in Terminal from that folder (replace the version):
 
 ```sh
-shasum -a 256 -c MeetMeet-0.1.0-arm64.dmg.sha256
+shasum -a 256 -c MeetMeet-0.2.0-arm64.dmg.sha256
 ```
 
 It should report `OK`. This detects corruption, not an independently trusted

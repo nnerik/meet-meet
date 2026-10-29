@@ -63,7 +63,7 @@ verify_app() {
     grep -q 'Signature=adhoc' "$work/signature.txt" || fail "Expected ad-hoc signing."
     grep -q 'flags=.*runtime' "$work/signature.txt" || fail "Hardened runtime missing."
     cmp LICENSE "$app/Contents/Resources/LICENSE"
-    for resource in billboard-light-mode.png billboard-dark-mode.png meet-meet.mp3 wrap-wrap.mp3; do
+    for resource in meet-meet.png wrap-wrap.png meet-meet.mp3 wrap-wrap.mp3; do
         [[ -s "$app/Contents/Resources/$resource" ]] || fail "Missing bundled media: $resource"
     done
 }

@@ -25,7 +25,7 @@ for the native HUD tests. The app has been tested locally with Xcode 27.1; CI
 uses the explicitly selected Xcode 26.6 on GitHub's `macos-26` runner.
 
 ```sh
-make release VERSION=0.1.0
+make release VERSION=0.2.0
 ```
 
 The script requires a clean committed tree and release notes. It runs the core
@@ -67,8 +67,8 @@ From a clean, reviewed commit on main:
 
 ```sh
 git push origin main
-git tag -a v0.1.0 -m "Meet Meet 0.1.0"
-git push origin v0.1.0
+git tag -a v0.2.0 -m "Meet Meet 0.2.0"
+git push origin v0.2.0
 ```
 
 The tag workflow checks out full history, selects Xcode, runs the same packaging

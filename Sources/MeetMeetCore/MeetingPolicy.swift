@@ -83,15 +83,14 @@ public struct MeetingPolicy: Sendable {
         }
 
         let rows = eligible.compactMap { meeting -> CountdownRow? in
-            let ongoing = meeting.start <= now
-            if !ongoing && (leadSeconds == 0 || meeting.start.timeIntervalSince(now) > leadSeconds) { return nil }
-            let boundary = ongoing ? meeting.end : meeting.start
-            let remaining = boundary.timeIntervalSince(now)
+            let countdown = MeetingCountdown(meeting: meeting, at: now)
+            if countdown.phase == .upcoming && (leadSeconds == 0 || countdown.remaining > leadSeconds) { return nil }
+            let remaining = countdown.remaining
             return CountdownRow(
-                meeting: meeting, phase: ongoing ? .ongoing : .upcoming, boundary: boundary,
+                meeting: meeting, phase: countdown.phase, boundary: countdown.boundary,
                 remaining: remaining, text: MeetingText.countdown(remaining, secondsThresholdMinutes: preferences.secondsThresholdMinutes),
-                accessibilityValue: "\(ongoing ? "Ends in" : "Starts in") " + MeetingText.spokenCountdown(remaining, secondsThresholdMinutes: preferences.secondsThresholdMinutes),
-                shouldPulse: remaining > 0 && remaining <= 60
+                accessibilityValue: "\(countdown.phase == .ongoing ? "Ends in" : "Starts in") " + MeetingText.spokenCountdown(remaining, secondsThresholdMinutes: preferences.secondsThresholdMinutes),
+                shouldPulse: countdown.isFinalMinute
             )
         }.sorted { $0.boundary == $1.boundary ? stableOrder($0.meeting, $1.meeting) : $0.boundary < $1.boundary }
 

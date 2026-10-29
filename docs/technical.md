@@ -93,7 +93,11 @@ tooltips retain the original location.
 The same **Cues** tab offers independent start/end audio cues (both off by default),
 bundled, system or imported sound selection, Preview and app-local volume. The bundled
 `media/meet-meet.mp3` and `media/wrap-wrap.mp3` are the start/end defaults for new
-settings; existing saved sound choices are preserved. Xcode copies these files
+settings and are offered only for their respective phases. System and imported
+sounds work for either phase. Valid saved choices are preserved; an unsupported
+opposite-phase bundled choice loads as that phase's default without changing
+enablement or timing. Preference edits reject opposite-phase bundled choices.
+Xcode copies these files
 into the app bundle, so playback does not depend on the source folder at runtime.
 Zero-minute offsets play
 at the boundary; end warnings before a short meeting's start are skipped.
@@ -111,6 +115,11 @@ Scheduled cues also wiggle each corresponding visible HUD icon five times with
 a one-second pause between repeats, unless Reduce Motion is enabled. This never
 reveals a hidden countdown or retains an ended meeting. Preview does not animate
 the HUD; coincident cues animate all corresponding visible icons.
+
+Unreadable visual-cue dismissal history disables automatic visuals but still
+allows explicitly opening trusted meeting info from a countdown. Manual opens
+and closes do not overwrite that history. Unreadable selection, hiding, pause
+or preference records still block info because eligibility is untrusted.
 
 **Pause for Today** keeps the menu and calendar refresh available but hides
 HUD rows and withholds audio-eligible input. Its next-local-midnight deadline
@@ -142,7 +151,7 @@ make run         # Build and open the persistent calendar menu
 make test        # Deterministic core tests via Swift Package Manager
 make test-xcode  # Core tests plus native HUD checks (brief fixture window)
 make verify     # Verify the built signature and inspect entitlements
-make release VERSION=0.1.0  # Test and package an arm64 DMG from a clean tree
+make release VERSION=0.2.0  # Test and package an arm64 DMG from a clean tree
 ```
 
 Or open `MeetMeet.xcodeproj`, select **MeetMeet**, and Run/Test. Settings and
@@ -169,6 +178,8 @@ publishing, packaging checks and distribution limitations.
 - `MeetingPolicy` consumes an explicit timestamp and calendar timezone and
   returns today's remaining meetings, menu summary and HUD rows. No timers or
   UI objects are involved. The menu and native HUD consume this same policy.
+  Internal `MeetingCountdown` shares the phase, deadline and exact final-minute
+  decisions between HUD rows, menu actions and suppression writes/reconciliation.
 - `MeetingSession` coordinates the real `CalendarSession`, `AudioCueSession`
   and lifecycle events behind the same public interface used by the app and
   integration fixtures. All outputs share the reconciled calendar timestamp,

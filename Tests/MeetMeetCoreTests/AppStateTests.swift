@@ -101,6 +101,27 @@ func allRecordsSurviveReconstruction() throws {
     #expect(storage.records.count == AppStateRecord.allCases.count)
 }
 
+@Test @MainActor
+func phaseSpecificSoundsRecoverOnLoadWithoutWritesAndRejectInvalidEdits() throws {
+    let storage = MemoryStateStore()
+    let data = Data(#"{"version":1,"value":{"startCue":{"soundName":"wrap-wrap"},"endCue":{"soundName":"meet-meet"}}}"#.utf8)
+    storage.records[AppStateRecord.preferences.storageKey] = data
+    let state = AppState(storage: storage)
+    #expect(state.preferences.startCue.soundName == "meet-meet")
+    #expect(state.preferences.endCue.soundName == "wrap-wrap")
+    #expect(storage.writeCount == 0)
+    #expect(storage.records[AppStateRecord.preferences.storageKey] == data)
+    let before = state.preferences
+    #expect(throws: PreferenceError.soundName) {
+        try state.updatePreferences { $0.startCue.soundName = "wrap-wrap" }
+    }
+    #expect(throws: PreferenceError.soundName) {
+        try state.updatePreferences { $0.endCue.soundName = "meet-meet" }
+    }
+    #expect(state.preferences == before)
+    #expect(storage.writeCount == 0)
+}
+
 @Test func roomShorteningDefaultsOffForOldOrMalformedPreferences() throws {
     for json in [#"{}"#, #"{"shortenGoogleRoomNames":"yes","menuTitleLimit":40}"#] {
         let preferences = try JSONDecoder().decode(AppPreferences.self, from: Data(json.utf8))

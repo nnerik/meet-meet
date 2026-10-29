@@ -136,6 +136,55 @@ private func splashMeeting(_ id: String = "one", startsIn: TimeInterval = 60, ca
     #expect(malformed.menuTitleLimit == 40)
 }
 
+@Test(arguments: [AppStateRecord.dismissedSplashCues, .dismissedEndSplashCues],
+      [Data("invalid".utf8), Data(#"{"version":99,"value":[]}"#.utf8)])
+@MainActor func unreadableCueHistoryAllowsManualInfoWithoutWriting(record: AppStateRecord, data: Data) throws {
+    let store = SplashStorage()
+    store.records[record.storageKey] = data
+    let state = try splashState(store)
+    let session = SplashCueSession(state: state)
+    let upcoming = splashMeeting()
+    let ongoing = splashMeeting("ongoing", startsIn: -500)
+    let writes = store.writes
+    session.update(occurrences: [upcoming, ongoing], isActive: true, at: splashNow)
+    #expect(session.meetings.isEmpty && session.endMeetings.isEmpty && session.infoMeetings.isEmpty)
+    for event in [upcoming, ongoing] { session.showMeetingInfo(for: event.key) }
+    #expect(Set(session.infoMeetings.map(\.key)) == [upcoming.key, ongoing.key])
+    session.suspend()
+    #expect(session.infoMeetings.isEmpty)
+    session.update(occurrences: [upcoming, ongoing], isActive: true, at: splashNow)
+    #expect(session.infoMeetings.count == 2)
+    session.dismiss()
+    #expect(session.infoMeetings.isEmpty)
+    #expect(session.errorMessage != nil)
+    #expect(store.writes == writes)
+    #expect(store.records[record.storageKey] == data)
+    session.update(occurrences: [upcoming, ongoing], isActive: true, at: splashNow)
+    #expect(session.meetings.isEmpty && session.endMeetings.isEmpty && session.infoMeetings.isEmpty)
+    session.showMeetingInfo(for: ongoing.key)
+    #expect(session.infoMeetings == [ongoing])
+    session.update(occurrences: [upcoming, ongoing], isActive: false, at: splashNow)
+    session.showMeetingInfo(for: ongoing.key)
+    #expect(session.infoMeetings.isEmpty)
+    #expect(store.writes == writes)
+}
+
+@Test(arguments: [AppStateRecord.hiddenEvents, .pause, .selectedCalendars, .preferences])
+@MainActor func unreadableEligibilityRecordsStillBlockManualInfo(record: AppStateRecord) throws {
+    let store = SplashStorage()
+    _ = try splashState(store)
+    store.records[record.storageKey] = Data(#"{"version":99,"value":[]}"#.utf8)
+    let state = AppState(storage: store)
+    let session = SplashCueSession(state: state)
+    let event = splashMeeting()
+    let writes = store.writes
+    session.update(occurrences: [event], isActive: true, at: splashNow)
+    session.showMeetingInfo(for: event.key)
+    #expect(session.infoMeetings.isEmpty && session.meetings.isEmpty && session.endMeetings.isEmpty)
+    #expect(session.errorMessage != nil)
+    #expect(store.writes == writes)
+}
+
 @Test @MainActor func endSplashCatchesUpOnlyDuringOngoingPhaseAndHidesAtEnd() throws {
     let state = try splashState()
     let session = SplashCueSession(state: state)

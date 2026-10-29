@@ -7,7 +7,7 @@ a line of Swift, and I don't plan to.
 
 I needed Meet Meet because I kept forgetting meetings, and, once I was in one,
 I would lose track of when it was supposed to end, or that there was another
-meeting right after. Notifications are easy to to miss, and when not missed,
+meeting right after. Notifications are easy to miss, and when not missed,
 they come as a surprise. I wanted something that not only reminded me, but also
 increased my awareness of what was coming up.
 
@@ -23,18 +23,31 @@ while you're working, and a more obvious nudge when it's time to join.
 
 - **See what's coming.** A floating countdown sits in the lower-right corner.
   Hover to reveal meeting titles, click a row to open meeting info, or drag the
-  whole stack somewhere else.
+  whole stack somewhere else. Upcoming countdowns appear 30 minutes before start
+  by default; change this in **Settings → General**. Your dragged position is
+  saved relative to the display's lower-right corner.
 - **Keep an eye on the finish line.** When a meeting starts, its countdown
   switches to time remaining so you know when to wrap up.
 - **Get a final nudge.** Dismissable visual cues appear one minute before start
   and two minutes before end by default. Start cues open meeting info with the
   title, location and a camera-icon **Join** button when a video link is available.
-  Info stays open through meeting start; end cues show the title. Configure timing, optional
-  sounds, and your own audio or images in **Settings → Cues**.
+  Info stays open through meeting start and closes when the Join link opens;
+  end cues show the title. Configure timing, optional sounds (off by default),
+  and your own audio or images in **Settings → Cues**. Imported files are copied
+  into the app, so you can move or remove the originals.
 - **Stay in control.** Hide meetings or recurring series you don't need reminders
   for, temporarily hide a countdown, or use **Pause for Today**.
 
-The countdown and splash appear without taking keyboard focus. Meet Meet lives
+Clicking a countdown opens info for upcoming or ongoing meetings, even if visual
+cues are disabled or already dismissed. Meeting links can come from the event's
+URL, location or conferencing details in its notes. Opening info yourself doesn't
+consume a later scheduled cue.
+
+For Google Workspace's structured room names, **Settings → General → Shorten
+meeting room names** can show just the room name. It's off by default and leaves
+other location formats unchanged.
+
+The countdown and visual cues appear without taking keyboard focus. Meet Meet lives
 in the menu bar, not the Dock. It reads your calendars; it never edits events.
 
 ### A look at the countdowns
@@ -53,10 +66,16 @@ The bell means “starts in”; the play icon means “ends in”. Visual cues u
 
 [**Download the latest release**](https://github.com/nnerik/meet-meet/releases/latest)
 
- You can run this in Terminal:
- ```bash
- curl -LO https://github.com/nnerik/meet-meet/releases/latest/download/MeetMeet-latest-arm64.dmg
- ```
+Or download the DMG in Terminal:
+
+```bash
+curl -fLO https://github.com/nnerik/meet-meet/releases/latest/download/MeetMeet-latest-arm64.dmg
+```
+
+Open the DMG, drag **MeetMeet.app** to **Applications**, then launch that copy
+and follow setup to grant calendar access and select calendars. Nothing is
+selected automatically. You can also opt into launch at login during setup or
+later in **Settings → General**.
 
 **A note about macOS security:** releases are ad-hoc signed, not Apple-notarized.
 macOS may block first launch. After trying to open the app, use **System Settings

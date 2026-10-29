@@ -10,8 +10,8 @@ import AppKit
 @Test @MainActor func nativeSoundPickersOnlyOfferTheirOwnBundledDefaultWithFriendlyLabels() {
     let imported = "imported:\(UUID().uuidString)-custom.mp3"
     let selections = ["meet-meet", "wrap-wrap", imported, "Glass"]
-    let start = SystemSoundPlayer.soundNames(isEnd: false, selectedNames: selections)
-    let end = SystemSoundPlayer.soundNames(isEnd: true, selectedNames: selections)
+    let start = SystemSoundPlayer.soundNames(for: .start, selectedNames: selections)
+    let end = SystemSoundPlayer.soundNames(for: .end, selectedNames: selections)
     #expect(start.contains("meet-meet") && !start.contains("wrap-wrap"))
     #expect(end.contains("wrap-wrap") && !end.contains("meet-meet"))
     for names in [start, end] {
@@ -82,6 +82,40 @@ import AppKit
     #expect(restored == saved)
     let missingFields = try JSONDecoder().decode(AppPreferences.self, from: Data("{}".utf8))
     #expect(missingFields == defaults)
+}
+
+@Test func oppositePhaseSavedSoundsRecoverOnlyTheirSoundNames() throws {
+    let restored = try JSONDecoder().decode(AppPreferences.self, from: Data(#"{"startCue":{"isEnabled":true,"soundName":"wrap-wrap","offsetMinutes":3},"endCue":{"isEnabled":true,"soundName":"meet-meet","offsetMinutes":4},"audioVolume":0.5}"#.utf8))
+    #expect(restored.startCue == AudioCuePreference(isEnabled: true, soundName: "meet-meet", offsetMinutes: 3))
+    #expect(restored.endCue == AudioCuePreference(isEnabled: true, soundName: "wrap-wrap", offsetMinutes: 4))
+    #expect(restored.audioVolume == 0.5)
+    #expect(try restored.validated() == restored)
+    #expect(try JSONDecoder().decode(AppPreferences.self, from: JSONEncoder().encode(restored)) == restored)
+    var scheduler = AudioCueScheduler()
+    let event = audioMeeting(start: 181, end: 481)
+    #expect(scheduler.update(occurrences: [event], selectedCalendarIDs: ["work"], preferences: restored, handled: [], at: audioNow).isEmpty)
+    let start = scheduler.update(occurrences: [event], selectedCalendarIDs: ["work"], preferences: restored, handled: [], at: audioNow.addingTimeInterval(1))
+    #expect(start.map(\.soundName) == ["meet-meet"])
+    _ = scheduler.update(occurrences: [event], selectedCalendarIDs: ["work"], preferences: restored, handled: [], at: audioNow.addingTimeInterval(240))
+    let end = scheduler.update(occurrences: [event], selectedCalendarIDs: ["work"], preferences: restored, handled: [], at: audioNow.addingTimeInterval(241))
+    #expect(end.map(\.soundName) == ["wrap-wrap"])
+}
+
+@Test(arguments: [AudioCueKind.start, .end])
+func oppositePhaseSoundEditsAreRejected(kind: AudioCueKind) {
+    var preferences = AppPreferences()
+    if kind == .start { preferences.startCue.soundName = "wrap-wrap" }
+    else { preferences.endCue.soundName = "meet-meet" }
+    #expect(throws: PreferenceError.soundName) { try preferences.validated() }
+}
+
+@Test(arguments: ["Glass", "Ping", "imported:00000000-0000-0000-0000-000000000000-custom.mp3"])
+func savedSystemAndImportedSoundsRemainValidForBothPhases(name: String) throws {
+    var preferences = AppPreferences()
+    preferences.startCue.soundName = name
+    preferences.endCue.soundName = name
+    #expect(try preferences.validated() == preferences)
+    #expect(try JSONDecoder().decode(AppPreferences.self, from: JSONEncoder().encode(preferences)) == preferences)
 }
 
 private func audioMeeting(_ id: String = "one", start: Double = 61, end: Double = 241,

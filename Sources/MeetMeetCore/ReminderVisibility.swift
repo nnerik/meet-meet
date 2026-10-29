@@ -30,12 +30,10 @@ public enum ReminderVisibilityPolicy {
             }
             let event = matches[0]
             guard event.end > now else { continue }
-            let phase: CountdownPhase = event.start > now ? .upcoming : .ongoing
-            guard phase == record.phase else { continue }
-            let boundary = phase == .upcoming ? event.start : event.end
-            guard boundary.timeIntervalSince(now) > 60 else { continue }
+            let countdown = MeetingCountdown(meeting: event, at: now)
+            guard countdown.phase == record.phase, countdown.canSuppress else { continue }
             suppressed.insert(event.key)
-            retainedSuppressions.append(CountdownSuppression(occurrence: record.occurrence, phase: phase, boundary: boundary))
+            retainedSuppressions.append(CountdownSuppression(occurrence: record.occurrence, phase: countdown.phase, boundary: countdown.boundary))
         }
         return ReminderVisibility(occurrences: occurrences.filter { !hidden.contains($0) }, suppressedCountdowns: suppressed,
                                   retainedRules: retainedRules, retainedSuppressions: retainedSuppressions)

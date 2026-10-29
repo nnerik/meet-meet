@@ -1,5 +1,16 @@
 import Foundation
 
+extension AudioCueKind {
+    public var bundledSoundName: String { self == .start ? "meet-meet" : "wrap-wrap" }
+
+    /// Bundled cues are phase-specific; system and imported sounds are shared.
+    /// Native playback separately validates that a sound exists and can decode.
+    public func allowsSound(named name: String) -> Bool {
+        let other: AudioCueKind = self == .start ? .end : .start
+        return name != other.bundledSoundName
+    }
+}
+
 public struct AudioCuePreference: Codable, Equatable, Sendable {
     public var isEnabled: Bool
     public var soundName: String
@@ -24,8 +35,8 @@ public struct AppPreferences: Codable, Equatable, Sendable {
     /// Nil uses the bundled artwork. Custom names refer to app-owned imports.
     public var startSplashImage: String?
     public var endSplashImage: String?
-    public var startCue = AudioCuePreference(soundName: "meet-meet", offsetMinutes: 1)
-    public var endCue = AudioCuePreference(soundName: "wrap-wrap", offsetMinutes: 2)
+    public var startCue = AudioCuePreference(soundName: AudioCueKind.start.bundledSoundName, offsetMinutes: 1)
+    public var endCue = AudioCuePreference(soundName: AudioCueKind.end.bundledSoundName, offsetMinutes: 2)
     public var audioVolume = 1.0
 
     public init() {}
@@ -44,7 +55,9 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         guard (0...60).contains(startCue.offsetMinutes) else { throw PreferenceError.startOffset }
         guard (0...60).contains(endCue.offsetMinutes) else { throw PreferenceError.endOffset }
         guard !startCue.soundName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
-              !endCue.soundName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { throw PreferenceError.soundName }
+              !endCue.soundName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              AudioCueKind.start.allowsSound(named: startCue.soundName),
+              AudioCueKind.end.allowsSound(named: endCue.soundName) else { throw PreferenceError.soundName }
         guard audioVolume.isFinite, (0...1).contains(audioVolume) else { throw PreferenceError.audioVolume }
         return self
     }
@@ -70,15 +83,16 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         startSplashImage = try? values.decode(String.self, forKey: .startSplashImage)
         endSplashImage = try? values.decode(String.self, forKey: .endSplashImage)
         if let value = try? values.decode(Double.self, forKey: .audioVolume), value.isFinite, (0...1).contains(value) { audioVolume = value }
-        startCue = Self.decodeCue(from: values, key: .startCue, fallback: startCue)
-        endCue = Self.decodeCue(from: values, key: .endCue, fallback: endCue)
+        startCue = Self.decodeCue(from: values, key: .startCue, kind: .start, fallback: startCue)
+        endCue = Self.decodeCue(from: values, key: .endCue, kind: .end, fallback: endCue)
     }
 
-    private static func decodeCue(from values: KeyedDecodingContainer<CodingKeys>, key: CodingKeys, fallback: AudioCuePreference) -> AudioCuePreference {
+    private static func decodeCue(from values: KeyedDecodingContainer<CodingKeys>, key: CodingKeys, kind: AudioCueKind, fallback: AudioCuePreference) -> AudioCuePreference {
         guard let cue = try? values.nestedContainer(keyedBy: CueKeys.self, forKey: key) else { return fallback }
         var result = fallback
         if let value = try? cue.decode(Bool.self, forKey: .isEnabled) { result.isEnabled = value }
-        if let value = try? cue.decode(String.self, forKey: .soundName), !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { result.soundName = value }
+        if let value = try? cue.decode(String.self, forKey: .soundName), !value.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+           kind.allowsSound(named: value) { result.soundName = value }
         if let value = try? cue.decode(Int.self, forKey: .offsetMinutes), (0...60).contains(value) { result.offsetMinutes = value }
         return result
     }
@@ -96,7 +110,7 @@ public enum PreferenceError: Error, LocalizedError, Equatable {
         case .menuTitleLimit: "Menu title length must be between 8 and 80 characters."
         case .splashLeadMinutes: "Splash lead time must be between 1 and 60 minutes."
         case .startOffset, .endOffset: "Audio offsets must be between 0 and 60 minutes."
-        case .soundName: "Choose a bundled, system or imported sound for each cue."
+        case .soundName: "Choose Meet Meet for start, Wrap Wrap for end, or a system or imported sound for either cue."
         case .audioVolume: "Audio volume must be between 0 and 1."
         }
     }

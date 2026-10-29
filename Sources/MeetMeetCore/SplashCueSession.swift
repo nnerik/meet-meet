@@ -45,7 +45,7 @@ public final class SplashCueSession {
 
     /// Callers provide reminder-filtered occurrences, before temporary HUD suppression.
     public func update(occurrences: [MeetingOccurrence], isActive: Bool, at now: Date) {
-        let unsafeRecords: Set<AppStateRecord> = [.dismissedSplashCues, .dismissedEndSplashCues, .hiddenEvents, .pause, .selectedCalendars, .preferences]
+        let unsafeRecords: Set<AppStateRecord> = [.hiddenEvents, .pause, .selectedCalendars, .preferences]
         guard !state.recoveryNotices.contains(where: { unsafeRecords.contains($0.record) }) else {
             reset()
             errorMessage = "Splash cues are disabled because saved reminder records could not be read. Restore those records or use the app version that saved them."
@@ -64,10 +64,18 @@ public final class SplashCueSession {
             $0.isEligibleMeeting && $0.end > now && state.selectedCalendarIDs.contains($0.calendarID) && counts[$0.key]?.count == 1
         }
         availableMeetings = eligible
+        // Dismissal history authorizes automatic reminders, not explicit opens
+        // of otherwise trusted meeting info. Never overwrite unreadable history.
+        let canPresentAutomatically = !state.recoveryNotices.contains {
+            $0.record == .dismissedSplashCues || $0.record == .dismissedEndSplashCues
+        }
+        if !canPresentAutomatically {
+            errorMessage = "Automatic visual cues are disabled because saved cue dismissals could not be read. You can still open meeting info from the countdown."
+        }
         let previousStarts = Set(meetings.map(\.key))
         let previousEnds = Set(endMeetings.map(\.key))
         meetings = eligible.filter {
-            state.preferences.splashCueEnabled && !dismissed.contains($0.key) &&
+            canPresentAutomatically && state.preferences.splashCueEnabled && !dismissed.contains($0.key) &&
                 $0.start > now && $0.start.timeIntervalSince(now) <= lead
         }.sorted {
             if $0.start != $1.start { return $0.start < $1.start }
@@ -76,7 +84,7 @@ public final class SplashCueSession {
         }
         let endLead = Double(state.preferences.endSplashLeadMinutes) * 60
         endMeetings = eligible.filter {
-            state.preferences.endSplashCueEnabled && !dismissedEnd.contains($0.key) &&
+            canPresentAutomatically && state.preferences.endSplashCueEnabled && !dismissedEnd.contains($0.key) &&
                 $0.start <= now && $0.end > now && $0.end.timeIntervalSince(now) <= endLead
         }.sorted {
             if $0.end != $1.end { return $0.end < $1.end }
@@ -90,7 +98,7 @@ public final class SplashCueSession {
         }
         let availableKeys = Set(eligible.map(\.key))
         manuallyOpened.formIntersection(availableKeys)
-        automaticallyOpened = state.preferences.splashCueEnabled
+        automaticallyOpened = canPresentAutomatically && state.preferences.splashCueEnabled
             ? automaticallyOpened.union(startKeys).intersection(availableKeys).subtracting(dismissed) : []
         updateInfoMeetings()
     }
@@ -118,7 +126,7 @@ public final class SplashCueSession {
             if !endDismissals.isEmpty {
                 try state.setDismissedEndSplashCues(state.dismissedEndSplashCues.union(locallyDismissedEnd))
             }
-            errorMessage = nil
+            if !startDismissals.isEmpty || !endDismissals.isEmpty { errorMessage = nil }
         } catch {
             errorMessage = "Meeting info and cues were closed, but the cue dismissal could not be saved. " + error.localizedDescription
         }

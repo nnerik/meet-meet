@@ -28,10 +28,11 @@ public struct MeetingMenuEntry: Equatable, Sendable {
     init(meeting: MeetingOccurrence, calendarTitle: String, isCountdownSuppressed: Bool, at now: Date) {
         self.meeting = meeting
         self.calendarTitle = calendarTitle
-        phase = meeting.start > now ? .upcoming : .ongoing
-        boundary = phase == .upcoming ? meeting.start : meeting.end
+        let countdown = MeetingCountdown(meeting: meeting, at: now)
+        phase = countdown.phase
+        boundary = countdown.boundary
         canHideOccurrence = meeting.identityEvidence != nil
         canHideSeries = meeting.identityEvidence?.isRecurring == true || meeting.identityEvidence?.isDetached == true
-        countdownAction = isCountdownSuppressed ? .restore : .suppress(isEnabled: boundary.timeIntervalSince(now) > 60)
+        countdownAction = isCountdownSuppressed ? .restore : .suppress(isEnabled: countdown.canSuppress)
     }
 }

@@ -22,6 +22,6 @@ verify: build
 	codesign --verify --deep --strict "$(APP)"
 	codesign --display --entitlements - "$(APP)"
 
-# Example: make release VERSION=0.1.0 (requires a clean committed tree).
+# Example: make release VERSION=0.2.0 (requires a clean committed tree).
 release:
 	bash scripts/package-release.sh "$(VERSION)"

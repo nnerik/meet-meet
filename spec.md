@@ -1,6 +1,6 @@
 # Meeting Countdown — MVP Specification
 
-Status: approved product decisions, ready for implementation.
+Status: approved behavior for 0.2.0; native acceptance remains in progress.
 
 ## 1. Purpose and scope
 
@@ -8,7 +8,7 @@ A personal-first native macOS utility for noticing upcoming meetings and keeping
 
 MVP includes a persistent calendar menu, one floating countdown stack, calendar selection, permanent and temporary hiding, optional bundled/system sounds, and opt-in launch at login.
 
-Out of scope: accounts for this app, analytics/telemetry, a backend, public distribution, notarization, automatic updates, and older-OS compatibility work. No additional appearance controls were specified beyond system appearance; no other draft feature is silently deferred. No promise of waking the Mac, alarms after Quit, exact real-time playback, or visibility above every system/full-screen surface.
+Distribution uses ad-hoc-signed Apple silicon DMGs with manual updates, as documented in `docs/releases.md`. Out of scope: accounts for this app, analytics/telemetry, a backend, Developer ID signing, notarization, automatic updates, and older-OS compatibility work. Apart from configurable cue images, no additional appearance controls were specified beyond system appearance; no other draft feature is silently deferred. No promise of waking the Mac, alarms after Quit, exact real-time playback, or visibility above every system/full-screen surface.
 
 ## 2. Platform and boundaries
 
@@ -105,7 +105,7 @@ Use a calendar icon followed by time and summary when relevant:
 - HUD clicks can open meeting info independently of visual-cue enablement and prior cue dismissals. Opening or closing manually opened info must not trigger, handle or dismiss a future audio/visual cue. If a scheduled cue becomes due while manually opened info is still visible, raise the panel without stealing focus. Closing info after an automatic cue has actually presented may dismiss that cue normally. Keep start/end histories independent.
 - Clear meeting info and cues on pause/access loss or when the relevant meeting is hidden/removed/ended. During calendar refresh, hide untrusted snapshots and restore previously open info only from fresh eligible occurrences, including ongoing ones. Disabling start visuals closes automatically opened info but not info explicitly opened from the HUD.
 - Meeting info and coincident/overlapping cue intervals share a single scrollable panel with artwork and meeting details. Closing the panel dismisses only automatically presented occurrence/phase pairs, independently for start and end; purely manual info requests do not write cue history. Cue dismissals persist across restart; open-info state does not. A later distinct cue can show a new panel. Legacy dismissals apply to start only. Failed dismissal persistence must not prevent live dismissal and must be reported.
-- Respect selected calendars, permanent hiding and Pause for Today. Temporary countdown suppression does not suppress the splash. Invalid or ambiguous occurrences cannot trigger it; unreadable reminder/dismissal records disable automatic splash presentation rather than risking unwanted repeats.
+- Respect selected calendars, permanent hiding and Pause for Today. Temporary countdown suppression does not suppress the splash. Invalid or ambiguous occurrences cannot trigger it; unreadable reminder/dismissal records disable automatic splash presentation rather than risking unwanted repeats. Unreadable start/end dismissal history alone must not prevent explicitly opening trusted meeting info, and manual open/close must leave that history untouched. Unreadable eligibility records (selection, hiding, pause or preferences) still block meeting-info presentation.
 
 ## 7. Permanent hiding and temporary suppression
 
@@ -140,7 +140,7 @@ Use a calendar icon followed by time and summary when relevant:
 
 ## 9. Audio
 
-- App-bundled MP3 cues, system sounds and user-provided audio files. Validate imported files and copy them into app-local storage so moving the original cannot break playback. Two independent global opt-in cues: before start and before end; each has a sound and offset. Default sounds are `meet-meet.mp3` before start and `wrap-wrap.mp3` before end; preserve existing saved sound choices.
+- App-bundled MP3 cues, system sounds and user-provided audio files. Validate imported files and copy them into app-local storage so moving the original cannot break playback. Two independent global opt-in cues: before start and before end; each has a sound and offset. Bundled sounds are phase-specific: `meet-meet.mp3` is the start-only default and `wrap-wrap.mp3` is the end-only default. System and imported sounds are available for either cue. Preserve valid saved sound choices; an opposite-phase bundled value falls back to that phase's default when loading, without changing enablement or timing. Reject opposite-phase bundled choices in preference edits; pickers, preview and scheduled playback use the same validated choice.
 - Both default off. Suggested offsets: 1 minute before start and 2 minutes before end. Offsets 0–60 minutes; zero means at the boundary.
 - Provide Preview and app-level volume without changing system volume. Surface actionable playback failures.
 - Scheduled cues also wiggle each corresponding already-visible HUD icon five times, with a one-second pause between repeats, respecting Reduce Motion. Do not reveal hidden/out-of-window rows or retain ended rows for this effect. Preview does not trigger the HUD cue. Coincident cues animate all corresponding visible icons even when audio is coalesced.
@@ -162,8 +162,8 @@ Use a calendar icon followed by time and summary when relevant:
 | Seconds threshold | 5 minutes | 0–60 minutes; zero disables seconds |
 | Menu title limit | 24 characters | 8–80 characters |
 | Shorten meeting room names | Off | Google Workspace structured locations only; display-only |
-| Start audio | Off; meet-meet; suggested offset 1 minute | Bundled, system or imported sound, enable/disable, offset 0–60 minutes |
-| End audio | Off; wrap-wrap; suggested offset 2 minutes | Bundled, system or imported sound, enable/disable, offset 0–60 minutes |
+| Start audio | Off; meet-meet; suggested offset 1 minute | Start-only bundled, system or imported sound, enable/disable, offset 0–60 minutes |
+| End audio | Off; wrap-wrap; suggested offset 2 minutes | End-only bundled, system or imported sound, enable/disable, offset 0–60 minutes |
 | Audio volume | Normal playback level | App-local volume, never system volume |
 | Calendar selection | Explicit onboarding choice | Available EventKit calendars; new calendars unselected |
 

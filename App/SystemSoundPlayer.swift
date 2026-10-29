@@ -78,16 +78,15 @@ enum CueMedia {
 
 @MainActor
 final class SystemSoundPlayer: NSObject, SystemSoundPlaying, NSSoundDelegate {
-    static let bundledSoundNames = ["meet-meet", "wrap-wrap"]
+    static let bundledSoundNames = [AudioCueKind.start.bundledSoundName, AudioCueKind.end.bundledSoundName]
 
     static var soundNames: [String] {
         let files = (try? FileManager.default.contentsOfDirectory(atPath: "/System/Library/Sounds")) ?? []
         return bundledSoundNames + files.filter { $0.hasSuffix(".aiff") }.map { String($0.dropLast(5)) }.sorted()
     }
 
-    static func soundNames(isEnd: Bool, selectedNames: [String]) -> [String] {
-        let excluded = isEnd ? "meet-meet" : "wrap-wrap"
-        return Set(soundNames + selectedNames).filter { $0 != excluded }.sorted {
+    static func soundNames(for kind: AudioCueKind, selectedNames: [String]) -> [String] {
+        Set(soundNames + selectedNames).filter { kind.allowsSound(named: $0) }.sorted {
             CueMedia.label(for: $0) < CueMedia.label(for: $1)
         }
     }

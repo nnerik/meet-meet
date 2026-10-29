@@ -30,11 +30,10 @@ public final class ReminderRules {
 
     public func suppressCountdown(_ event: MeetingOccurrence, at now: Date) throws {
         guard event.end > now else { throw ReminderRuleError.eventEnded }
-        let phase: CountdownPhase = event.start > now ? .upcoming : .ongoing
-        let boundary = phase == .upcoming ? event.start : event.end
-        guard boundary.timeIntervalSince(now) > 60 else { throw ReminderRuleError.finalMinute }
+        let countdown = MeetingCountdown(meeting: event, at: now)
+        guard countdown.canSuppress else { throw ReminderRuleError.finalMinute }
         let next = state.countdownSuppressions.filter { $0.occurrence != event.key }
-            + [CountdownSuppression(occurrence: event.key, phase: phase, boundary: boundary)]
+            + [CountdownSuppression(occurrence: event.key, phase: countdown.phase, boundary: countdown.boundary)]
         try state.setCountdownSuppressions(next)
     }
 
