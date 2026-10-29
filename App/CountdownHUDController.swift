@@ -14,6 +14,7 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
     private let panel: CountdownPanel
     private let content: HUDInteractionView
     private let meetingInfoRequested: (OccurrenceKey) -> Void
+    private let isPointerDown: () -> Bool
     private var reveal = HUDRevealState()
     private var revealTask: Task<Void, Never>?
     private var observers: Set<AnyCancellable> = []
@@ -43,10 +44,12 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         return Double(elapsed.seconds) + Double(elapsed.attoseconds) / 1e18
     }
 
-    init(state: AppState, session: CalendarSession, showMeetingInfo: @escaping (OccurrenceKey) -> Void = { _ in }) {
+    init(state: AppState, session: CalendarSession, showMeetingInfo: @escaping (OccurrenceKey) -> Void = { _ in },
+         isPointerDown: @escaping () -> Bool = { NSEvent.pressedMouseButtons & 1 != 0 }) {
         self.state = state
         self.session = session
         meetingInfoRequested = showMeetingInfo
+        self.isPointerDown = isPointerDown
         let placement = HUDPlacementSession(state: state)
         self.placement = placement
         let model = HUDViewModel(placement: placement)
@@ -138,7 +141,7 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         let update = placement.update(rowCount: rows.count, expanded: reveal.isExpanded(at: revealNow),
                                       longestCountdownLength: rows.map { $0.text.count }.max() ?? 4,
                                       displays: Self.displays(), legacyScrollerWidth: scrollerWidth,
-                                      isPointerDown: NSEvent.pressedMouseButtons & 1 != 0)
+                                       isPointerDown: isPointerDown())
         switch update {
         case .hidden:
             model.expanded = false
@@ -203,13 +206,13 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
 
     func endViewDrag() {
         guard running else { return }
-        placement.endMove(at: panel.frame, displays: Self.displays(), isPointerDown: NSEvent.pressedMouseButtons & 1 != 0)
+        placement.endMove(at: panel.frame, displays: Self.displays(), isPointerDown: isPointerDown())
         reveal.setHovering(panel.frame.contains(NSEvent.mouseLocation))
         synchronize()
     }
 
     func windowWillMove(_ notification: Notification) {
-        guard running, layoutMoveDepth == 0, NSEvent.pressedMouseButtons & 1 != 0 else { return }
+        guard running, layoutMoveDepth == 0, isPointerDown() else { return }
         placement.beginMove(at: panel.frame, source: .nativeWindow)
     }
 
@@ -218,7 +221,7 @@ final class CountdownHUDController: NSObject, NSWindowDelegate {
         // Native window-manager movement can bypass or outlive view drag
         // callbacks. Capture the authoritative anchor before a clock refresh
         // can reapply an old one. Our own expansion/reflow moves are excluded.
-        placement.recordMove(to: panel.frame, displays: Self.displays(), isPointerDown: NSEvent.pressedMouseButtons & 1 != 0)
+        placement.recordMove(to: panel.frame, displays: Self.displays(), isPointerDown: isPointerDown())
     }
 
     private static func displays() -> [HUDDisplay] {

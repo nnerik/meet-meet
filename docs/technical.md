@@ -282,6 +282,16 @@ the display ID. Both normal and protected storage preserve the compact anchor;
 subsequent genuine movement still updates it. Physical notification ordering
 remains unverified.
 
+Native drag-reflow validation for #37: synthetic movement now supplies explicit
+pointer-button state rather than depending on the user's actual mouse during a
+test. Coverage includes release at view completion and native movement outliving
+that callback, with both normal and protected placement storage. Holding the
+button reproduced the frozen-layout assertion reliably; releasing it and ticking
+restores reflow and visibility without changing the saved anchor. Production
+still reads `NSEvent.pressedMouseButtons`. This isolates the test input; it does
+not establish physical pointer/display behavior or prove the historical button
+state, which was not captured in the original failure.
+
 State uses app-local UserDefaults data records. Loading does not rewrite saved
 data: malformed preference fields fall back individually, unreadable records
 do not reset siblings, and unknown schema versions remain protected from

@@ -280,8 +280,8 @@ func nativeHUDProtectedPlacementKeepsItsLiveAnchorAndReportsTheFailedSave() asyn
     #expect(storage.writes == writes)
 }
 
-@Test(arguments: [false, true]) @MainActor
-func nativeHUDViewDragDefersReflowAndKeepsItsAuthoritativeAnchor(protectedRecord: Bool) async throws {
+@Test(arguments: [false, true], [false, true]) @MainActor
+func nativeHUDViewDragDefersReflowAndKeepsItsAuthoritativeAnchor(protectedRecord: Bool, pointerHeldAfterView: Bool) async throws {
     let application = NSApplication.shared
     let protected = Data(#"{"version":99,"value":{"savedBy":"a newer version"}}"#.utf8)
     let storage = NativeHUDMemoryStore(records: protectedRecord ? [AppStateRecord.hudPosition.storageKey: protected] : [:])
@@ -291,7 +291,9 @@ func nativeHUDViewDragDefersReflowAndKeepsItsAuthoritativeAnchor(protectedRecord
     let session = CalendarSession(reader: reader, state: state)
     await session.refresh()
     let before = Set(application.windows.map { ObjectIdentifier($0) })
-    let controller = CountdownHUDController(state: state, session: session)
+    // Synthetic movement must not sample the user's actual mouse-button state.
+    var pointerDown = true
+    let controller = CountdownHUDController(state: state, session: session, isPointerDown: { pointerDown })
     let window = try #require(application.windows.first {
         !before.contains(ObjectIdentifier($0)) && $0.identifier?.rawValue == "meetmeet.countdownHUD"
     })
@@ -309,8 +311,18 @@ func nativeHUDViewDragDefersReflowAndKeepsItsAuthoritativeAnchor(protectedRecord
     for _ in 0..<10 { await Task.yield() }
     #expect(session.presentation.hudRows.count == 2)
     #expect(window.frame == moved)
+    pointerDown = pointerHeldAfterView
     controller.endViewDrag()
-    #expect(await waitForHUD { window.frame.height > initial.height })
+    if pointerHeldAfterView {
+        // Native movement can outlive the view callback. Keep reflow frozen
+        // until pointer release is observed on the next regular countdown tick.
+        #expect(window.frame == moved)
+        pointerDown = false
+        session.tick()
+    }
+    let didReflow = await waitForHUD { window.frame.height > initial.height }
+    #expect(didReflow, "initial=\(initial), moved=\(moved), current=\(window.frame), visible=\(window.isVisible), rows=\(session.presentation.hudRows.count), status=\(session.status), pointerDown=\(pointerDown)")
+    #expect(window.isVisible)
     for _ in 0..<3 {
         session.tick()
         try await Task.sleep(for: .milliseconds(10))
