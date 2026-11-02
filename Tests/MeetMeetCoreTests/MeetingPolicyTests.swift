@@ -26,6 +26,69 @@ private func present(_ events: [MeetingOccurrence], at now: Date? = nil, prefere
         .presentation(for: events, selectedCalendarIDs: selected, at: now ?? noon)
 }
 
+@Test(arguments: [(0.0, "0:00"), (0.9, "0:00"), (1.0, "0:01"), (61.9, "1:01"), (179.9, "2:59")])
+func disabledOngoingCountdownShowsElapsedTime(elapsed: Double, expected: String) throws {
+    var preferences = AppPreferences()
+    preferences.countdownDuringMeetings = false
+    preferences.secondsThresholdMinutes = 0 // Elapsed display always uses m:ss.
+    let event = meeting("one", start: 0)
+    let result = try present([event], at: noon.addingTimeInterval(elapsed), preferences: preferences)
+    let row = try #require(result.hudRows.first)
+    #expect(row.text == expected)
+    #expect(abs(row.remaining + elapsed) < 0.000001)
+    #expect(row.phase == .ongoing && row.symbolName == "play.fill")
+    #expect(row.boundary == event.start)
+    #expect(!row.shouldPulse)
+    #expect(row.accessibilityValue.hasPrefix("Started "))
+    #expect(row.accessibilityValue.hasSuffix(" ago"))
+}
+
+@Test(arguments: [(0.0, "0:00"), (59.9, "0:59"), (60.0, "1:00"), (599.9, "9:59"), (600.0, "10:00")])
+func elapsedTimeUsesUnpaddedMinutes(elapsed: Double, expected: String) {
+    #expect(MeetingText.elapsedSinceStart(elapsed) == expected)
+}
+
+@Test(arguments: [0, 3, 10])
+func elapsedDisplayHidesAtConfiguredLimitWithoutHidingMeeting(minutes: Int) throws {
+    var preferences = AppPreferences()
+    preferences.countdownDuringMeetings = false
+    preferences.postStartMinutes = minutes
+    let event = meeting("one", start: 0, duration: 1_200)
+    #expect(try present([event], at: noon.addingTimeInterval(-1), preferences: preferences).hudRows.first?.text == "0:01")
+    if minutes > 0 {
+        #expect(try present([event], at: noon.addingTimeInterval(Double(minutes * 60) - 0.01), preferences: preferences).hudRows.count == 1)
+    }
+    let result = try present([event], at: noon.addingTimeInterval(Double(minutes * 60)), preferences: preferences)
+    #expect(result.hudRows.isEmpty)
+    #expect(result.remainingToday == [event])
+    #expect(result.summary == .ongoing(meetings: [event]))
+    preferences.countdownDuringMeetings = true
+    #expect(try present([event], at: noon.addingTimeInterval(Double(minutes * 60)), preferences: preferences).hudRows.count == 1)
+}
+
+@Test func elapsedDisplayNeverOutlivesShortMeeting() throws {
+    var preferences = AppPreferences()
+    preferences.countdownDuringMeetings = false
+    let event = meeting("short", start: 0, duration: 30)
+    #expect(try present([event], at: event.end, preferences: preferences).hudRows.isEmpty)
+}
+
+@Test func countdownModePreferencesMigrateValidateAndRoundTrip() throws {
+    for json in ["{}", #"{"countdownDuringMeetings":"no","postStartMinutes":11}"#] {
+        let preferences = try JSONDecoder().decode(AppPreferences.self, from: Data(json.utf8))
+        #expect(preferences.countdownDuringMeetings)
+        #expect(preferences.postStartMinutes == 3)
+    }
+    var preferences = AppPreferences()
+    preferences.countdownDuringMeetings = false
+    preferences.postStartMinutes = 10
+    preferences.splashLeadMinutes = 0
+    preferences.endSplashLeadMinutes = 0
+    let restored = try JSONDecoder().decode(AppPreferences.self, from: JSONEncoder().encode(preferences))
+    #expect(restored == preferences)
+    #expect(try restored.validated() == preferences)
+}
+
 @Test
 func eligibilityExcludesOnlyTheAgreedCases() throws {
     let events = [

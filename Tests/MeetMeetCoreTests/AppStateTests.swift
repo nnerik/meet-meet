@@ -142,8 +142,9 @@ func invalidPreferenceEditsDoNotMutateStateOrStorage() throws {
         { $0.hudLeadMinutes = -1 }, { $0.hudLeadMinutes = 121 },
         { $0.secondsThresholdMinutes = -1 }, { $0.secondsThresholdMinutes = 61 },
         { $0.menuTitleLimit = 7 }, { $0.menuTitleLimit = 81 },
-        { $0.splashLeadMinutes = 0 }, { $0.splashLeadMinutes = 61 },
-        { $0.endSplashLeadMinutes = 0 }, { $0.endSplashLeadMinutes = 61 },
+        { $0.splashLeadMinutes = -1 }, { $0.splashLeadMinutes = 61 },
+        { $0.endSplashLeadMinutes = -1 }, { $0.endSplashLeadMinutes = 61 },
+        { $0.postStartMinutes = -1 }, { $0.postStartMinutes = 11 },
         { $0.startCue.offsetMinutes = -1 }, { $0.startCue.offsetMinutes = 61 },
         { $0.endCue.offsetMinutes = -1 }, { $0.endCue.offsetMinutes = 61 },
         { $0.audioVolume = -0.1 }, { $0.audioVolume = 1.1 },
@@ -163,10 +164,12 @@ func inclusivePreferenceBoundsAreAccepted() throws {
     try state.updatePreferences {
         $0.hudLeadMinutes = 0; $0.secondsThresholdMinutes = 0; $0.menuTitleLimit = 8
         $0.startCue.offsetMinutes = 0; $0.endCue.offsetMinutes = 0; $0.audioVolume = 0
+        $0.splashLeadMinutes = 0; $0.endSplashLeadMinutes = 0; $0.postStartMinutes = 0
     }
     try state.updatePreferences {
         $0.hudLeadMinutes = 120; $0.secondsThresholdMinutes = 60; $0.menuTitleLimit = 80
         $0.startCue.offsetMinutes = 60; $0.endCue.offsetMinutes = 60; $0.audioVolume = 1
+        $0.splashLeadMinutes = 60; $0.endSplashLeadMinutes = 60; $0.postStartMinutes = 10
     }
 }
 

@@ -81,7 +81,8 @@ final class SplashHUDController: NSObject {
         let width = min(640, area.width * 0.8)
         artwork.update(start: session.infoMeetings, end: session.endMeetings, preferences: session.preferences, width: width)
         let height = min(artwork.contentHeight, area.height * 0.8)
-        panel.setAccessibilityLabel(session.infoMeetings.isEmpty ? "Meeting ends soon" : "Meeting info")
+        let endLabel = session.preferences.endSplashLeadMinutes == 0 ? "Meeting ended" : "Meeting ends soon"
+        panel.setAccessibilityLabel(session.infoMeetings.isEmpty ? endLabel : "Meeting info")
         panel.setFrame(NSRect(x: area.midX - width / 2, y: area.midY - height / 2,
                               width: width, height: height), display: true)
         if !panel.isVisible || presentedRevision != session.presentationRevision {
@@ -208,7 +209,8 @@ private final class SplashArtworkView: NSView {
             image.image = CueMedia.image(named: name, isEnd: isEnd, bundle: bundle)
             image.imageScaling = .scaleProportionallyUpOrDown
             image.identifier = NSUserInterfaceItemIdentifier(name ?? (isEnd ? "wrap-wrap" : "meet-meet"))
-            image.setAccessibilityLabel(isEnd ? "Meeting ends soon" : "Meeting info")
+            let endLabel = preferences.endSplashLeadMinutes == 0 ? "Meeting ended" : "Meeting ends soon"
+            image.setAccessibilityLabel(isEnd ? endLabel : "Meeting info")
             stack.addArrangedSubview(image)
             let size = image.image?.size ?? NSSize(width: 600, height: 400)
             image.widthAnchor.constraint(equalToConstant: availableWidth).isActive = true

@@ -25,6 +25,8 @@ public struct AudioCuePreference: Codable, Equatable, Sendable {
 
 public struct AppPreferences: Codable, Equatable, Sendable {
     public var hudLeadMinutes = 30
+    public var countdownDuringMeetings = true
+    public var postStartMinutes = 3
     public var secondsThresholdMinutes = 5
     public var menuTitleLimit = 24
     public var shortenGoogleRoomNames = false
@@ -50,8 +52,9 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         guard (0...120).contains(hudLeadMinutes) else { throw PreferenceError.hudLeadMinutes }
         guard (0...60).contains(secondsThresholdMinutes) else { throw PreferenceError.secondsThresholdMinutes }
         guard (8...80).contains(menuTitleLimit) else { throw PreferenceError.menuTitleLimit }
-        guard (1...60).contains(splashLeadMinutes) else { throw PreferenceError.splashLeadMinutes }
-        guard (1...60).contains(endSplashLeadMinutes) else { throw PreferenceError.splashLeadMinutes }
+        guard (0...10).contains(postStartMinutes) else { throw PreferenceError.postStartMinutes }
+        guard (0...60).contains(splashLeadMinutes) else { throw PreferenceError.splashLeadMinutes }
+        guard (0...60).contains(endSplashLeadMinutes) else { throw PreferenceError.splashLeadMinutes }
         guard (0...60).contains(startCue.offsetMinutes) else { throw PreferenceError.startOffset }
         guard (0...60).contains(endCue.offsetMinutes) else { throw PreferenceError.endOffset }
         guard !startCue.soundName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -66,20 +69,23 @@ public struct AppPreferences: Codable, Equatable, Sendable {
         case hudLeadMinutes, secondsThresholdMinutes, menuTitleLimit, splashCueEnabled, splashLeadMinutes, startCue, endCue, audioVolume
         case endSplashCueEnabled, endSplashLeadMinutes, startSplashImage, endSplashImage
         case shortenGoogleRoomNames
+        case countdownDuringMeetings, postStartMinutes
     }
 
     /// Recover individual malformed fields without discarding valid sibling preferences.
     public init(from decoder: any Decoder) throws {
         let values = try decoder.container(keyedBy: CodingKeys.self)
         self.init()
+        if let value = try? values.decode(Bool.self, forKey: .countdownDuringMeetings) { countdownDuringMeetings = value }
+        if let value = try? values.decode(Int.self, forKey: .postStartMinutes), (0...10).contains(value) { postStartMinutes = value }
         if let value = try? values.decode(Int.self, forKey: .hudLeadMinutes), (0...120).contains(value) { hudLeadMinutes = value }
         if let value = try? values.decode(Int.self, forKey: .secondsThresholdMinutes), (0...60).contains(value) { secondsThresholdMinutes = value }
         if let value = try? values.decode(Int.self, forKey: .menuTitleLimit), (8...80).contains(value) { menuTitleLimit = value }
         if let value = try? values.decode(Bool.self, forKey: .shortenGoogleRoomNames) { shortenGoogleRoomNames = value }
         if let value = try? values.decode(Bool.self, forKey: .splashCueEnabled) { splashCueEnabled = value }
-        if let value = try? values.decode(Int.self, forKey: .splashLeadMinutes), (1...60).contains(value) { splashLeadMinutes = value }
+        if let value = try? values.decode(Int.self, forKey: .splashLeadMinutes), (0...60).contains(value) { splashLeadMinutes = value }
         if let value = try? values.decode(Bool.self, forKey: .endSplashCueEnabled) { endSplashCueEnabled = value }
-        if let value = try? values.decode(Int.self, forKey: .endSplashLeadMinutes), (1...60).contains(value) { endSplashLeadMinutes = value }
+        if let value = try? values.decode(Int.self, forKey: .endSplashLeadMinutes), (0...60).contains(value) { endSplashLeadMinutes = value }
         startSplashImage = try? values.decode(String.self, forKey: .startSplashImage)
         endSplashImage = try? values.decode(String.self, forKey: .endSplashImage)
         if let value = try? values.decode(Double.self, forKey: .audioVolume), value.isFinite, (0...1).contains(value) { audioVolume = value }
@@ -101,14 +107,16 @@ public struct AppPreferences: Codable, Equatable, Sendable {
 }
 
 public enum PreferenceError: Error, LocalizedError, Equatable {
+    case postStartMinutes
     case hudLeadMinutes, secondsThresholdMinutes, menuTitleLimit, splashLeadMinutes, startOffset, endOffset, soundName, audioVolume
 
     public var errorDescription: String? {
         switch self {
+        case .postStartMinutes: "Post-start display time must be between 0 and 10 minutes."
         case .hudLeadMinutes: "HUD lead time must be between 0 and 120 minutes."
         case .secondsThresholdMinutes: "Seconds threshold must be between 0 and 60 minutes."
         case .menuTitleLimit: "Menu title length must be between 8 and 80 characters."
-        case .splashLeadMinutes: "Splash lead time must be between 1 and 60 minutes."
+        case .splashLeadMinutes: "Splash lead time must be between 0 and 60 minutes."
         case .startOffset, .endOffset: "Audio offsets must be between 0 and 60 minutes."
         case .soundName: "Choose Meet Meet for start, Wrap Wrap for end, or a system or imported sound for either cue."
         case .audioVolume: "Audio volume must be between 0 and 1."

@@ -307,7 +307,12 @@ private struct SettingsView: View {
         Form {
             Section("Countdowns") {
                 IntegerSettingField("Show before start", value: preference(\.hudLeadMinutes), range: 0...120, unit: "minutes")
-                Text("Zero shows ongoing countdowns only.").font(.caption).foregroundStyle(.secondary)
+                Text("Zero hides the countdown before start.").font(.caption).foregroundStyle(.secondary)
+                Toggle("Countdown during meetings", isOn: preference(\.countdownDuringMeetings))
+                if !state.preferences.countdownDuringMeetings {
+                    IntegerSettingField("Keep showing after start", value: preference(\.postStartMinutes), range: 0...10, unit: "minutes")
+                    Text("Show elapsed time as m:ss, then hide. Zero hides immediately at start.").font(.caption).foregroundStyle(.secondary)
+                }
                 IntegerSettingField("Show seconds below", value: preference(\.secondsThresholdMinutes), range: 0...60, unit: "minutes")
                 Text("Zero disables seconds.").font(.caption).foregroundStyle(.secondary)
             }
@@ -339,7 +344,7 @@ private struct SettingsView: View {
                 Slider(value: preference(\.audioVolume), in: 0...1) { Text("App volume") }
                 Text("Zero-minute offsets mean the meeting boundary. App volume does not change system volume. Missed cues are skipped after interruptions; sounds are best-effort while the app is running.")
                     .font(.caption).foregroundStyle(.secondary)
-                Text("Start visual cues open meeting info, which stays open through the start until dismissed or the meeting ends. Click any HUD meeting to open its info without consuming the scheduled cue. End visual cues close at meeting end. Close with ×, or click the artwork then press Escape. Cues do not interrupt typing. Imported files are copied into Meet Meet; the originals can be moved or removed.")
+                Text("Start visual cues open meeting info, which stays open through the start until dismissed or the meeting ends. Click any HUD meeting to open its info without consuming the scheduled cue. End visual cues close at meeting end, except zero-minute cues, which stay until dismissed. Close with ×, or click the artwork then press Escape. Cues do not interrupt typing. Imported files are copied into Meet Meet; the originals can be moved or removed.")
                     .font(.caption).foregroundStyle(.secondary)
                 if let error = audioCues.errorMessage {
                     Label(error, systemImage: "exclamationmark.triangle").font(.callout)
@@ -366,7 +371,7 @@ private struct SettingsView: View {
             }
             Divider()
             Toggle("Visual cue", isOn: preference(isEnd ? \.endSplashCueEnabled : \.splashCueEnabled))
-            IntegerSettingField("Visual before \(isEnd ? "end" : "start")", value: preference(isEnd ? \.endSplashLeadMinutes : \.splashLeadMinutes), range: 1...60, unit: "minutes")
+            IntegerSettingField("Visual before \(isEnd ? "end" : "start")", value: preference(isEnd ? \.endSplashLeadMinutes : \.splashLeadMinutes), range: 0...60, unit: "minutes")
             LabeledContent("Image", value: state.preferences[keyPath: imageKey].map { CueMedia.label(for: $0) } ?? "Default")
             HStack {
                 Button("Choose image file…") { importMedia(audio: false, isEnd: isEnd) }

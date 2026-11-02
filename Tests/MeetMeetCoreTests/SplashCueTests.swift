@@ -130,10 +130,71 @@ private func splashMeeting(_ id: String = "one", startsIn: TimeInterval = 60, ca
     #expect(preferences.calendarFetchHorizonMinutes == 60)
     preferences.splashCueEnabled = false
     #expect(preferences.calendarFetchHorizonMinutes == 0)
-    let malformed = try JSONDecoder().decode(AppPreferences.self, from: Data(#"{"splashLeadMinutes":0,"splashCueEnabled":"yes","menuTitleLimit":40}"#.utf8))
+    let malformed = try JSONDecoder().decode(AppPreferences.self, from: Data(#"{"splashLeadMinutes":-1,"splashCueEnabled":"yes","menuTitleLimit":40}"#.utf8))
     #expect(malformed.splashLeadMinutes == 1)
     #expect(malformed.splashCueEnabled)
     #expect(malformed.menuTitleLimit == 40)
+}
+
+@Test(arguments: [false, true]) @MainActor
+func zeroVisualCuesCrossBoundariesAndStayUntilDismissed(isEnd: Bool) throws {
+    let store = SplashStorage()
+    let state = try splashState(store)
+    try state.updatePreferences { $0.splashLeadMinutes = 0; $0.endSplashLeadMinutes = 0 }
+    let session = SplashCueSession(state: state)
+    let event = splashMeeting()
+    let boundary = isEnd ? event.end : event.start
+    session.update(occurrences: [event], isActive: true, at: boundary.addingTimeInterval(-0.5))
+    #expect(session.infoMeetings.isEmpty && session.endMeetings.isEmpty)
+    session.update(occurrences: [event], isActive: true, at: boundary.addingTimeInterval(0.5))
+    #expect(isEnd ? session.endMeetings == [event] : session.infoMeetings == [event])
+    session.update(occurrences: [event], isActive: true, at: boundary.addingTimeInterval(2))
+    #expect(isEnd ? session.endMeetings == [event] : session.infoMeetings == [event])
+    session.suspend()
+    #expect(session.infoMeetings.isEmpty && session.endMeetings.isEmpty)
+    session.update(occurrences: [event], isActive: true, at: boundary.addingTimeInterval(3))
+    #expect(isEnd ? session.endMeetings == [event] : session.infoMeetings == [event])
+    session.dismiss()
+    #expect(isEnd ? state.dismissedEndSplashCues.contains(event.key) : state.dismissedSplashCues.contains(event.key))
+    let restored = SplashCueSession(state: AppState(storage: store))
+    restored.update(occurrences: [event], isActive: true, at: boundary)
+    #expect(restored.infoMeetings.isEmpty && restored.endMeetings.isEmpty)
+}
+
+@Test(arguments: [false, true]) @MainActor
+func zeroVisualCuesPresentAtExactBoundaryButNeverReplayMissedCues(isEnd: Bool) throws {
+    let state = try splashState()
+    try state.updatePreferences { $0.splashLeadMinutes = 0; $0.endSplashLeadMinutes = 0 }
+    let event = splashMeeting()
+    let boundary = isEnd ? event.end : event.start
+    let session = SplashCueSession(state: state)
+    session.update(occurrences: [event], isActive: true, at: boundary.addingTimeInterval(1))
+    #expect(session.infoMeetings.isEmpty && session.endMeetings.isEmpty)
+    session.update(occurrences: [event], isActive: true, at: boundary.addingTimeInterval(-1))
+    session.suspend()
+    session.update(occurrences: [event], isActive: true, at: boundary.addingTimeInterval(1))
+    #expect(session.infoMeetings.isEmpty && session.endMeetings.isEmpty)
+    session.update(occurrences: [event], isActive: true, at: boundary)
+    #expect(isEnd ? session.endMeetings == [event] : session.infoMeetings == [event])
+    session.update(occurrences: [], isActive: true, at: boundary.addingTimeInterval(1))
+    #expect(session.infoMeetings.isEmpty && session.endMeetings.isEmpty)
+}
+
+@Test(arguments: [false, true]) @MainActor
+func zeroVisualCuesDoNotCrossDeadlinesAfterEditsOrSettingsChanges(isEnd: Bool) throws {
+    let state = try splashState()
+    try state.updatePreferences { $0.splashLeadMinutes = 0; $0.endSplashLeadMinutes = 0 }
+    let event = splashMeeting()
+    let boundary = isEnd ? event.end : event.start
+    let session = SplashCueSession(state: state)
+    session.update(occurrences: [event], isActive: true, at: boundary.addingTimeInterval(-0.5))
+    try state.updatePreferences { $0.hudLeadMinutes = 15 }
+    session.update(occurrences: [event], isActive: true, at: boundary.addingTimeInterval(0.5))
+    #expect(session.infoMeetings.isEmpty && session.endMeetings.isEmpty)
+    session.reset()
+    session.update(occurrences: [splashMeeting(startsIn: 61)], isActive: true, at: boundary.addingTimeInterval(-0.5))
+    session.update(occurrences: [event], isActive: true, at: boundary.addingTimeInterval(0.5))
+    #expect(session.infoMeetings.isEmpty && session.endMeetings.isEmpty)
 }
 
 @Test(arguments: [AppStateRecord.dismissedSplashCues, .dismissedEndSplashCues],

@@ -18,6 +18,10 @@ public final class SplashCueSession {
     private var availableMeetings: [MeetingOccurrence] = []
     private var manuallyOpened: Set<OccurrenceKey> = []
     private var automaticallyOpened: Set<OccurrenceKey> = []
+    private var previousUpdate: Date?
+    private var previousOccurrences: [MeetingOccurrence] = []
+    private var previousPreferences: AppPreferences?
+    private var openedZeroEndCues: [OccurrenceKey: Date] = [:]
 
     public init(state: AppState) { self.state = state }
 
@@ -25,6 +29,7 @@ public final class SplashCueSession {
         suspend()
         manuallyOpened = []
         automaticallyOpened = []
+        openedZeroEndCues = [:]
     }
 
     /// Hide untrusted snapshots during refresh, retaining only the identities
@@ -34,6 +39,9 @@ public final class SplashCueSession {
         endMeetings = []
         infoMeetings = []
         availableMeetings = []
+        previousUpdate = nil
+        previousOccurrences = []
+        previousPreferences = nil
     }
 
     public func showMeetingInfo(for key: OccurrenceKey) {
@@ -60,9 +68,10 @@ public final class SplashCueSession {
         let dismissed = state.dismissedSplashCues.union(locallyDismissed)
         let dismissedEnd = state.dismissedEndSplashCues.union(locallyDismissedEnd)
         let lead = Double(state.preferences.splashLeadMinutes) * 60
-        let eligible = occurrences.filter {
-            $0.isEligibleMeeting && $0.end > now && state.selectedCalendarIDs.contains($0.calendarID) && counts[$0.key]?.count == 1
+        let trusted = occurrences.filter {
+            $0.isEligibleMeeting && state.selectedCalendarIDs.contains($0.calendarID) && counts[$0.key]?.count == 1
         }
+        let eligible = trusted.filter { $0.end > now }
         availableMeetings = eligible
         // Dismissal history authorizes automatic reminders, not explicit opens
         // of otherwise trusted meeting info. Never overwrite unreadable history.
@@ -74,18 +83,33 @@ public final class SplashCueSession {
         }
         let previousStarts = Set(meetings.map(\.key))
         let previousEnds = Set(endMeetings.map(\.key))
+        // Native ticks need not land exactly on a boundary. Only cross a zero-
+        // offset deadline observed in the prior trusted snapshot, never catch up
+        // after launch, interruption, edits or a setting change.
+        func reachedBoundary(_ event: MeetingOccurrence, end: Bool) -> Bool {
+            let boundary = end ? event.end : event.start
+            if boundary == now { return true }
+            guard let previousUpdate, previousUpdate < boundary, boundary <= now,
+                  now.timeIntervalSince(previousUpdate) <= 5,
+                  previousPreferences == state.preferences else { return false }
+            return previousOccurrences.contains {
+                $0.key == event.key && $0.start == event.start && $0.end == event.end
+            }
+        }
         meetings = eligible.filter {
             canPresentAutomatically && state.preferences.splashCueEnabled && !dismissed.contains($0.key) &&
-                $0.start > now && $0.start.timeIntervalSince(now) <= lead
+                (lead == 0 ? reachedBoundary($0, end: false) : $0.start > now && $0.start.timeIntervalSince(now) <= lead)
         }.sorted {
             if $0.start != $1.start { return $0.start < $1.start }
             if $0.calendarID != $1.calendarID { return $0.calendarID < $1.calendarID }
             return $0.id < $1.id
         }
         let endLead = Double(state.preferences.endSplashLeadMinutes) * 60
-        endMeetings = eligible.filter {
-            canPresentAutomatically && state.preferences.endSplashCueEnabled && !dismissedEnd.contains($0.key) &&
-                $0.start <= now && $0.end > now && $0.end.timeIntervalSince(now) <= endLead
+        endMeetings = trusted.filter { event in
+            let retainedZeroCue = openedZeroEndCues[event.key] == event.end && event.end <= now
+            return canPresentAutomatically && state.preferences.endSplashCueEnabled && !dismissedEnd.contains(event.key) &&
+                (endLead == 0 ? reachedBoundary(event, end: true) || retainedZeroCue :
+                    event.start <= now && event.end > now && event.end.timeIntervalSince(now) <= endLead)
         }.sorted {
             if $0.end != $1.end { return $0.end < $1.end }
             if $0.calendarID != $1.calendarID { return $0.calendarID < $1.calendarID }
@@ -93,6 +117,7 @@ public final class SplashCueSession {
         }
         let startKeys = Set(meetings.map(\.key))
         let endKeys = Set(endMeetings.map(\.key))
+        openedZeroEndCues = endLead == 0 ? Dictionary(uniqueKeysWithValues: endMeetings.map { ($0.key, $0.end) }) : [:]
         if !startKeys.subtracting(previousStarts).isEmpty || !endKeys.subtracting(previousEnds).isEmpty {
             presentationRevision += 1
         }
@@ -101,6 +126,9 @@ public final class SplashCueSession {
         automaticallyOpened = canPresentAutomatically && state.preferences.splashCueEnabled
             ? automaticallyOpened.union(startKeys).intersection(availableKeys).subtracting(dismissed) : []
         updateInfoMeetings()
+        previousUpdate = now
+        previousOccurrences = trusted.filter { $0.end > now }
+        previousPreferences = state.preferences
     }
 
     private func updateInfoMeetings() {

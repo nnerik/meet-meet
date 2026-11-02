@@ -26,6 +26,12 @@ public enum MeetingText {
         return minutes >= 60 ? "\(minutes / 60)h \(minutes % 60)m" : "\(minutes)m"
     }
 
+    public static func elapsedSinceStart(_ elapsed: TimeInterval) -> String {
+        guard elapsed.isFinite, elapsed >= 0, elapsed < Double(Int.max) else { return "—" }
+        let seconds = Int(floor(elapsed))
+        return "\(seconds / 60):" + String(format: "%02d", seconds % 60)
+    }
+
     /// Match the visible countdown's precision/rounding without ambiguous
     /// abbreviations such as `m` (which a screen reader may read as meters).
     public static func spokenCountdown(_ remaining: TimeInterval, secondsThresholdMinutes: Int) -> String {

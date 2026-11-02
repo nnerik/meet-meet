@@ -86,6 +86,40 @@ private func liveMeeting(_ id: String = "one", start: TimeInterval, end: TimeInt
     return state
 }
 
+@Test @MainActor func liveElapsedHUDAndBoundaryVisualCuesRemainIndependentOfAudio() async throws {
+    let state = try liveState()
+    try state.updatePreferences {
+        $0.countdownDuringMeetings = false
+        $0.postStartMinutes = 0
+        $0.splashLeadMinutes = 0
+        $0.endSplashLeadMinutes = 0
+    }
+    let clock = LiveClock()
+    let player = LiveSoundPlayer()
+    let event = liveMeeting(start: 1, end: 3)
+    let live = MeetingSession(reader: LiveCalendarReader([event]), state: state, player: player,
+                              clock: clock, calendar: liveCalendar, scheduler: LiveRefreshScheduler())
+    live.start()
+    defer { live.stop() }
+    await live.refresh()
+    #expect(live.presentation.hudRows.count == 1)
+    clock.set(liveNow.addingTimeInterval(1.5))
+    live.tick()
+    #expect(live.presentation.hudRows.isEmpty)
+    #expect(live.presentation.remainingToday == [event])
+    #expect(live.splashCues.infoMeetings == [event])
+    #expect(player.sounds == ["meet-meet"])
+    clock.set(liveNow.addingTimeInterval(3.5))
+    live.tick()
+    #expect(live.presentation.remainingToday.isEmpty)
+    #expect(live.splashCues.infoMeetings.isEmpty)
+    #expect(live.splashCues.endMeetings == [event])
+    #expect(player.sounds == ["meet-meet", "wrap-wrap"])
+    clock.set(liveNow.addingTimeInterval(4.5))
+    live.tick()
+    #expect(live.splashCues.endMeetings == [event])
+}
+
 @Test @MainActor func liveSessionKeepsMenuHUDAndAudioOnTheSameBoundaryTimestamp() async throws {
     let state = try liveState()
     let clock = LiveClock()

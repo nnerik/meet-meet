@@ -85,6 +85,16 @@ public struct MeetingPolicy: Sendable {
         let rows = eligible.compactMap { meeting -> CountdownRow? in
             let countdown = MeetingCountdown(meeting: meeting, at: now)
             if countdown.phase == .upcoming && (leadSeconds == 0 || countdown.remaining > leadSeconds) { return nil }
+            if countdown.phase == .ongoing && !preferences.countdownDuringMeetings {
+                let elapsed = now.timeIntervalSince(meeting.start)
+                guard elapsed < Double(preferences.postStartMinutes) * 60 else { return nil }
+                return CountdownRow(
+                    meeting: meeting, phase: .ongoing, boundary: meeting.start,
+                    remaining: -elapsed, text: MeetingText.elapsedSinceStart(elapsed),
+                    accessibilityValue: "Started " + MeetingText.spokenCountdown(floor(elapsed), secondsThresholdMinutes: 11) + " ago",
+                    shouldPulse: false
+                )
+            }
             let remaining = countdown.remaining
             return CountdownRow(
                 meeting: meeting, phase: countdown.phase, boundary: countdown.boundary,
