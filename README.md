@@ -16,7 +16,7 @@ and shows how much time is left in the ones already underway. A quiet reminder
 while you're working, and a more obvious nudge when it's time to join.
 
 <p align="center">
-  <img src="media/billboard-light-mode.png" alt="Meet Meet billboard illustration in a sunny desert landscape" width="640">
+  <img src="media/meet-meet.png" alt="Meet Meet - girl running" width="640">
 </p>
 
 ## Before the meeting. During the meeting.
@@ -38,10 +38,11 @@ while you're working, and a more obvious nudge when it's time to join.
 - **Stay in control.** Hide meetings or recurring series you don't need reminders
   for, temporarily hide a countdown, or use **Pause for Today**.
 
+<img src="docs/images/countdowns-dark.png" alt="Countdown HUD showing the same upcoming and ongoing meetings" width="411">
+
 Clicking a countdown opens info for upcoming or ongoing meetings, even if visual
 cues are disabled or already dismissed. Meeting links can come from the event's
-URL, location or conferencing details in its notes. Opening info yourself doesn't
-consume a later scheduled cue.
+URL, location or conferencing details in its notes.
 
 For Google Workspace's structured room names, **Settings → General → Shorten
 meeting room names** can show just the room name. It's off by default and leaves
@@ -49,16 +50,6 @@ other location formats unchanged.
 
 The countdown and visual cues appear without taking keyboard focus. Meet Meet lives
 in the menu bar, not the Dock. It reads your calendars; it never edits events.
-
-### A look at the countdowns
-
-| Light mode | Dark mode |
-| --- | --- |
-| <img src="docs/images/countdowns-light.png" alt="Light-mode countdown HUD showing Design review starting in 4 minutes 32 seconds and Team sync ending in 12 minutes" width="411"> | <img src="docs/images/countdowns-dark.png" alt="Dark-mode countdown HUD showing the same upcoming and ongoing meetings" width="411"> |
-
-*Actual HUD rendering with fictional meetings, shown with titles revealed.
-The bell means “starts in”; the play icon means “ends in”. Visual cues use
-`meet-meet.png` before start and `wrap-wrap.png` before end, in either appearance.*
 
 ## Download
 
