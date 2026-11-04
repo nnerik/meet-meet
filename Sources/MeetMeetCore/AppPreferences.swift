@@ -31,13 +31,13 @@ public struct AppPreferences: Codable, Equatable, Sendable {
     public var menuTitleLimit = 24
     public var shortenGoogleRoomNames = false
     public var splashCueEnabled = true
-    public var splashLeadMinutes = 1
+    public var splashLeadMinutes = 2
     public var endSplashCueEnabled = true
-    public var endSplashLeadMinutes = 2
+    public var endSplashLeadMinutes = 0
     /// Nil uses the bundled artwork. Custom names refer to app-owned imports.
     public var startSplashImage: String?
     public var endSplashImage: String?
-    public var startCue = AudioCuePreference(soundName: AudioCueKind.start.bundledSoundName, offsetMinutes: 1)
+    public var startCue = AudioCuePreference(isEnabled: true, soundName: AudioCueKind.start.bundledSoundName, offsetMinutes: 2)
     public var endCue = AudioCuePreference(soundName: AudioCueKind.end.bundledSoundName, offsetMinutes: 2)
     public var audioVolume = 1.0
 

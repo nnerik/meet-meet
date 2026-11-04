@@ -19,6 +19,7 @@ private func splashMeeting(_ id: String = "one", startsIn: TimeInterval = 60, ca
 @MainActor private func splashState(_ store: SplashStorage = SplashStorage()) throws -> AppState {
     let state = AppState(storage: store)
     try state.setSelectedCalendarIDs(["work"])
+    try state.updatePreferences { $0.splashLeadMinutes = 1; $0.endSplashLeadMinutes = 2 }
     return state
 }
 
@@ -121,17 +122,18 @@ private func splashMeeting(_ id: String = "one", startsIn: TimeInterval = 60, ca
 @Test func splashPreferencesDecodeOldAndMalformedSettingsAndExtendFetchHorizon() throws {
     let old = try JSONDecoder().decode(AppPreferences.self, from: Data(#"{"hudLeadMinutes":0}"#.utf8))
     #expect(old.splashCueEnabled)
-    #expect(old.splashLeadMinutes == 1)
+    #expect(old.splashLeadMinutes == 2)
     #expect(old.endSplashCueEnabled)
-    #expect(old.endSplashLeadMinutes == 2)
-    #expect(old.calendarFetchHorizonMinutes == 1)
+    #expect(old.endSplashLeadMinutes == 0)
+    #expect(old.calendarFetchHorizonMinutes == 2)
     var preferences = old
     preferences.splashLeadMinutes = 60
     #expect(preferences.calendarFetchHorizonMinutes == 60)
     preferences.splashCueEnabled = false
+    preferences.startCue.isEnabled = false
     #expect(preferences.calendarFetchHorizonMinutes == 0)
     let malformed = try JSONDecoder().decode(AppPreferences.self, from: Data(#"{"splashLeadMinutes":-1,"splashCueEnabled":"yes","menuTitleLimit":40}"#.utf8))
-    #expect(malformed.splashLeadMinutes == 1)
+    #expect(malformed.splashLeadMinutes == 2)
     #expect(malformed.splashCueEnabled)
     #expect(malformed.menuTitleLimit == 40)
 }

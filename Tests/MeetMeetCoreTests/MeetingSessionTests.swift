@@ -146,6 +146,7 @@ private func liveMeeting(_ id: String = "one", start: TimeInterval, end: TimeInt
 
 @Test @MainActor func liveHUDInfoOpeningDoesNotConsumeAudioOrVisualCuesAndSurvivesStartRefresh() async throws {
     let state = try liveState()
+    try state.updatePreferences { $0.splashLeadMinutes = 1 }
     let event = liveMeeting(start: 120, end: 600)
     let clock = LiveClock()
     let player = LiveSoundPlayer()
@@ -236,7 +237,9 @@ private func liveMeeting(_ id: String = "one", start: TimeInterval, end: TimeInt
 @Test @MainActor func liveSplashCatchesUpAfterWakeButNeverAfterMeetingStart() async throws {
     let clock = LiveClock()
     let event = liveMeeting(start: 120, end: 600)
-    let live = MeetingSession(reader: LiveCalendarReader([event]), state: try liveState(), player: LiveSoundPlayer(),
+    let state = try liveState()
+    try state.updatePreferences { $0.splashLeadMinutes = 1 }
+    let live = MeetingSession(reader: LiveCalendarReader([event]), state: state, player: LiveSoundPlayer(),
                               clock: clock, calendar: liveCalendar, scheduler: LiveRefreshScheduler())
     live.start()
     defer { live.stop() }

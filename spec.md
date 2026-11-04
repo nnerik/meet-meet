@@ -140,8 +140,18 @@ Use a calendar icon followed by time and summary when relevant:
 
 ## 9. Audio
 
-- App-bundled MP3 cues, system sounds and user-provided audio files. Validate imported files and copy them into app-local storage so moving the original cannot break playback. Two independent global opt-in cues: before start and before end; each has a sound and offset. Bundled sounds are phase-specific: `meet-meet.mp3` is the start-only default and `wrap-wrap.mp3` is the end-only default. System and imported sounds are available for either cue. Preserve valid saved sound choices; an opposite-phase bundled value falls back to that phase's default when loading, without changing enablement or timing. Reject opposite-phase bundled choices in preference edits; pickers, preview and scheduled playback use the same validated choice.
-- Both default off. Suggested offsets: 1 minute before start and 2 minutes before end. Offsets 0–60 minutes; zero means at the boundary.
+- App-bundled MP3 cues, system sounds and user-provided audio files. Validate
+  imported files and copy them into app-local storage so moving the original
+  cannot break playback. Two independent global optional cues: before start and
+  before end; each has a sound and offset. Bundled sounds are phase-specific:
+  `meet-meet.mp3` is the start-only default and `wrap-wrap.mp3` is the end-only
+  default. System and imported sounds are available for either cue. Preserve
+  valid saved sound choices; an opposite-phase bundled value falls back to that
+  phase's default when loading, without changing enablement or timing. Reject
+  opposite-phase bundled choices in preference edits; pickers, preview and
+  scheduled playback use the same validated choice.
+- Start audio defaults on, 2 minutes before start; end audio defaults off, with
+  an offset of 2 minutes before end. Offsets 0–60 minutes; zero means at the boundary.
 - Provide Preview and app-level volume without changing system volume. Surface actionable playback failures.
 - Scheduled cues also wiggle each corresponding already-visible HUD icon five times, with a one-second pause between repeats, respecting Reduce Motion. Do not reveal hidden/out-of-window rows or retain ended rows for this effect. Preview does not trigger the HUD cue. Coincident cues animate all corresponding visible icons even when audio is coalesced.
 - Best-effort playback while running; no wake-from-sleep, after-Quit, or exact-deadline guarantee. Muted/unavailable output cannot guarantee audibility.
@@ -159,12 +169,12 @@ Use a calendar icon followed by time and summary when relevant:
 | HUD lead time | 30 minutes | 0–120 minutes; zero ongoing-only |
 | Countdown during meetings | On | Enable/disable countdown toward end |
 | Post-start display | 3 minutes | 0–10 minutes of elapsed time when countdown during meetings is off; zero hides at start |
-| Start visual cue | On; meet-meet.png; 1 minute before start | Enable/disable; lead time 0–60 minutes; default or imported image |
-| End visual cue | On; wrap-wrap.png; 2 minutes before end | Enable/disable; lead time 0–60 minutes; default or imported image |
+| Start visual cue | On; meet-meet.png; 2 minutes before start | Enable/disable; lead time 0–60 minutes; default or imported image |
+| End visual cue | On; wrap-wrap.png; at meeting end (0 minutes) | Enable/disable; lead time 0–60 minutes; default or imported image |
 | Seconds threshold | 5 minutes | 0–60 minutes; zero disables seconds |
 | Menu title limit | 24 characters | 8–80 characters |
 | Shorten meeting room names | Off | Google Workspace structured locations only; display-only |
-| Start audio | Off; meet-meet; suggested offset 1 minute | Start-only bundled, system or imported sound, enable/disable, offset 0–60 minutes |
+| Start audio | On; meet-meet; offset 2 minutes | Start-only bundled, system or imported sound, enable/disable, offset 0–60 minutes |
 | End audio | Off; wrap-wrap; suggested offset 2 minutes | End-only bundled, system or imported sound, enable/disable, offset 0–60 minutes |
 | Audio volume | Normal playback level | App-local volume, never system volume |
 | Calendar selection | Explicit onboarding choice | Available EventKit calendars; new calendars unselected |

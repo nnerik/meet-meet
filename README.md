@@ -30,13 +30,13 @@ while you're working, and a more obvious nudge when it's time to join.
   switches to time remaining so you know when to wrap up. Turn off **Countdown
   during meetings** in **Settings → General** to show elapsed time as `m:ss`
   instead, for 3 minutes after start (configurable from 0–10), then hide the row.
-- **Get a final nudge.** Dismissable visual cues appear one minute before start
-  and two minutes before end by default. Start cues open meeting info with the
+- **Get a final nudge.** Dismissable visual cues appear two minutes before start
+  and at meeting end by default. Start cues open meeting info with the
   title, location and a camera-icon **Join** button when a video link is available.
   Info stays open through meeting start and closes when the Join link opens;
-  end cues show the title. Configure timing, optional sounds (off by default),
-  and your own audio or images in **Settings → Cues**. Imported files are copied
-  into the app, so you can move or remove the originals. All timer settings
+  end cues show the title. Configure timing, optional sounds (start on, end off
+  by default), and your own audio or images in **Settings → Cues**. Imported files
+  are copied into the app, so you can move or remove the originals. All timer settings
   accept zero; zero-minute visual cues appear at start/end. An at-end visual
   cue stays open until dismissed.
 - **Stay in control.** Hide meetings or recurring series you don't need reminders

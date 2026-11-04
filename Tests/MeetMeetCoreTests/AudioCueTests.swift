@@ -74,9 +74,9 @@ import AppKit
     let defaults = AppPreferences()
     #expect(defaults.startCue.soundName == "meet-meet")
     #expect(defaults.endCue.soundName == "wrap-wrap")
-    #expect(!defaults.startCue.isEnabled && !defaults.endCue.isEnabled)
+    #expect(defaults.startCue.isEnabled && !defaults.endCue.isEnabled)
     var saved = defaults
-    saved.startCue = AudioCuePreference(isEnabled: true, soundName: "Glass", offsetMinutes: 3)
+    saved.startCue = AudioCuePreference(isEnabled: false, soundName: "Glass", offsetMinutes: 3)
     saved.endCue = AudioCuePreference(soundName: "Ping", offsetMinutes: 4)
     let restored = try JSONDecoder().decode(AppPreferences.self, from: JSONEncoder().encode(saved))
     #expect(restored == saved)
@@ -128,6 +128,7 @@ private func audioPreferences() -> AppPreferences {
     var preferences = AppPreferences()
     preferences.startCue.isEnabled = true
     preferences.endCue.isEnabled = true
+    preferences.startCue.offsetMinutes = 1
     return preferences
 }
 
@@ -144,10 +145,11 @@ private func update(_ scheduler: inout AudioCueScheduler, events: [MeetingOccurr
     #expect(update(&scheduler, seconds: 2).isEmpty)
 }
 
-@Test func audioDefaultsAreSilentAndEndCueCanFireIndependently() {
+@Test func audioDefaultsEnableStartAndEndCueCanFireIndependently() {
     var scheduler = AudioCueScheduler()
-    _ = update(&scheduler, preferences: AppPreferences(), seconds: 0)
-    #expect(update(&scheduler, preferences: AppPreferences(), seconds: 1).isEmpty)
+    let defaultEvents = [audioMeeting(start: 121)]
+    _ = update(&scheduler, events: defaultEvents, preferences: AppPreferences(), seconds: 0)
+    #expect(update(&scheduler, events: defaultEvents, preferences: AppPreferences(), seconds: 1).map(\.kind) == [.start])
     var preferences = audioPreferences()
     preferences.startCue.isEnabled = false
     let events = [audioMeeting(start: -100, end: 121)]

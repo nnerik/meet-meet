@@ -90,8 +90,9 @@ pattern matches; other locations remain unchanged. The setting changes display
 text only, never calendar events or meeting-link detection. Menu location
 tooltips retain the original location.
 
-The same **Cues** tab offers independent start/end audio cues (both off by default),
-bundled, system or imported sound selection, Preview and app-local volume. The bundled
+The same **Cues** tab offers independent start/end audio cues (start on at two
+minutes before start, end off by default), bundled, system or imported sound
+selection, Preview and app-local volume. The bundled
 `media/meet-meet.mp3` and `media/wrap-wrap.mp3` are the start/end defaults for new
 settings and are offered only for their respective phases. System and imported
 sounds work for either phase. Valid saved choices are preserved; an unsupported

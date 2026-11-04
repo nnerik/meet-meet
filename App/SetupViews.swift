@@ -19,7 +19,7 @@ struct OnboardingView: View {
                     VStack(alignment: .leading, spacing: 18) {
                         Label("Upcoming and ongoing countdowns, without calendar changes.", systemImage: "calendar")
                         Text("Meet Meet lives in the calendar menu in your menu bar, not the Dock. Use that menu for meeting actions, Pause for Today, Settings and Quit.")
-                        Text("Choose which calendars to monitor. Sounds and launch at login are optional and off by default for new settings.")
+                        Text("Choose which calendars to monitor. Start sounds are on by default; end sounds and launch at login are off. All are optional.")
                         Text("No accounts, telemetry or backend. Your selections and reminder rules stay on this Mac.")
                     }.frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 case .calendars:
